@@ -23,7 +23,7 @@ public class QueryDumpLog {
     private Logger logger;
 
     public QueryDumpLog(String dumpName) {
-        logger = LogManager.getLogger(dumpName);
+        logger = LogManager.getContext(LogManager.class.getClassLoader(), false).getLogger(dumpName);
     }
 
     public static QueryDumpLog getQueryDump() {

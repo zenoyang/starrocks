@@ -47,7 +47,7 @@ public class AuditLog {
     }
 
     public AuditLog(String auditName) {
-        logger = LogManager.getLogger(auditName);
+        logger = LogManager.getContext(LogManager.class.getClassLoader(), false).getLogger(auditName);
     }
 
     public void log(Object message) {

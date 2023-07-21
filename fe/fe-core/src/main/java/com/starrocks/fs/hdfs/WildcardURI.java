@@ -39,7 +39,7 @@ import java.nio.charset.StandardCharsets;
  * getPath() will return: /testdata/20180[8-9]*
  */
 public class WildcardURI {
-    private static Logger LOG = LogManager.getLogger(WildcardURI.class.getName());
+    private static Logger LOG = LogManager.getLogger(WildcardURI.class);
 
     private URI uri;
 

@@ -446,7 +446,7 @@ public class LoadMgr implements Writable {
                 Iterator<LoadJob> iterator = jobs.iterator();
                 for (int i = 0; i != numJobsToRemove && iterator.hasNext(); ++i) {
                     LoadJob job = iterator.next();
-                    LOG.info("remove redundant job: {}", job.getLabel());
+                    LOG.debug("remove redundant job: {}", job.getLabel());
                     unprotectedRemoveJobReleatedMeta(job);
                 }
             }
