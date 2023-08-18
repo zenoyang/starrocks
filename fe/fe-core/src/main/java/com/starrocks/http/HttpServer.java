@@ -72,6 +72,8 @@ import com.starrocks.http.rest.GetSmallFileAction;
 import com.starrocks.http.rest.GetStreamLoadState;
 import com.starrocks.http.rest.HealthAction;
 import com.starrocks.http.rest.LoadAction;
+import com.starrocks.http.rest.MetaInfoService.GetDatabasesAction;
+import com.starrocks.http.rest.MetaInfoService.GetTablesAction;
 import com.starrocks.http.rest.MetaReplayerCheckAction;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.http.rest.MigrationAction;
@@ -87,6 +89,7 @@ import com.starrocks.http.rest.ShowRuntimeInfoAction;
 import com.starrocks.http.rest.StopFeAction;
 import com.starrocks.http.rest.StorageTypeCheckAction;
 import com.starrocks.http.rest.SyncCloudTableMetaAction;
+import com.starrocks.http.rest.TableDetailAction;
 import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
@@ -211,6 +214,11 @@ public class HttpServer {
         DumpAction.registerAction(controller, imageDir);
         DumpStarMgrAction.registerAction(controller, imageDir);
         RoleAction.registerAction(controller, imageDir);
+
+        // meta info action
+        GetDatabasesAction.registerAction(controller);
+        GetTablesAction.registerAction(controller);
+        TableDetailAction.registerAction(controller);
 
         // external usage
         TableRowCountAction.registerAction(controller);

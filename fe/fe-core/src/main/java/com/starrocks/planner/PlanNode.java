@@ -127,7 +127,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // case 1: If agg node hash outer join child
     // Vector agg node must handle all agg and group by column by nullable
     // we couldn't do this work in BE for merge phase
-    //  
+    //
     // case 2: If children has RepeatNode,
     // we should generate nullable columns for group by columns
     protected boolean hasNullableGenerateChild = false;

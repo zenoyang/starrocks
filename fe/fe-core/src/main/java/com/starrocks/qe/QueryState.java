@@ -74,7 +74,10 @@ public class QueryState {
     }
 
     private MysqlStateType stateType = MysqlStateType.OK;
+
+    private Throwable error = null;
     private String errorMessage = "";
+
     private ErrorCode errorCode;
     private String infoMessage;
     private ErrType errType = ErrType.OTHER_ERR;
@@ -126,6 +129,16 @@ public class QueryState {
         this.stateType = MysqlStateType.ERR;
         this.setMsg(errorMsg);
         isFinished = true;
+    }
+
+    public void setError(String errorMsg, Throwable error) {
+        this.error = error;
+        this.stateType = MysqlStateType.ERR;
+        this.errorMessage = errorMsg;
+    }
+
+    public Throwable getError() {
+        return error;
     }
 
     public boolean isError() {
