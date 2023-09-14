@@ -1,0 +1,29 @@
+name: StarRocks UT
+trigger:
+  change:
+    types: [ submit, create, push ]
+
+jobs:
+  ut-fe:
+    image:  hub.byted.org/compile/starrocks-3.2:9b6de884158dd4492302e3ef565e428f
+    working-directory: emr-core/StarRocks
+    runs-on:
+      spec: m1.8xlarge
+    steps:
+      - name: fe
+        commands:
+          - mkdir -p /root/.m2/
+          - cp .codebase/settings.xml /root/.m2/
+          - sh run-fe-ut.sh
+  ut-be:
+    image:  hub.byted.org/compile/starrocks-3.2:9b6de884158dd4492302e3ef565e428f
+    working-directory: emr-core/StarRocks
+    runs-on:
+      spec: m1.8xlarge
+    steps:
+      - name: be
+        commands:
+          # -j 12 to avoid kill by system while linking
+          - sh run-be-ut.sh -j 12
+
+

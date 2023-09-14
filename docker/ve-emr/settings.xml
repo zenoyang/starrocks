@@ -1,0 +1,57 @@
+<settings>
+<profiles>
+  <profile>
+    <id>bytedance-repos</id>
+    <repositories>
+       <repository>
+           <id>bytedance-snapshots</id>
+           <url>http://maven.byted.org/repository/snapshots</url>
+       </repository>
+       <repository>
+           <id>bytedance-releases</id>
+           <url>http://maven.byted.org/repository/releases</url>
+       </repository>
+   </repositories>
+   <!--  插件拉取地址  -->
+ <pluginRepositories>
+   <pluginRepository>
+       <id>bytedance-repo</id>
+       <url>https://maven.byted.org/repository/public</url>
+   </pluginRepository>
+ </pluginRepositories>
+  </profile>
+</profiles>
+
+<activeProfiles>
+  <activeProfile>bytedance-repos</activeProfile>
+</activeProfiles>
+<pluginRepositories>
+   <pluginRepository>
+       <id>bytedance-repo</id>
+       <url>https://maven.byted.org/repository/public</url>
+   </pluginRepository>
+</pluginRepositories>
+<!--  下面的用户名和密码请从SCM平台获取  -->
+ <servers>
+   <server>
+     <id>bytedance-repo</id>
+     <username>xxxx</username>
+     <password>xxxx</password>
+   </server>
+ </servers>
+ <mirrors>
+   <mirror>
+     <id>bytedance-mirror</id>
+     <mirrorOf>*</mirrorOf>
+     <url>http://maven.byted.org/repository/public</url>
+   </mirror>
+ <mirror>
+      <id>oracleReleases</id>
+      <mirrorOf>oracleReleases</mirrorOf>
+      <name>Oracle Released Java Packages</name>
+      <url>http://download.oracle.com/maven</url>
+    </mirror>
+
+ </mirrors>
+</settings>
+
