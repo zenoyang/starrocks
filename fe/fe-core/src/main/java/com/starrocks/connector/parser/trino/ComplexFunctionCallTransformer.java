@@ -31,7 +31,9 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.MapExpr;
 
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 
 public class ComplexFunctionCallTransformer {
     public static Expr transform(String functionName, Expr... args) {
@@ -103,6 +105,9 @@ public class ComplexFunctionCallTransformer {
                 ArithmeticExpr addExpr = new ArithmeticExpr(ArithmeticExpr.Operator.ADD, mulExpr, args[0]);
                 return new FunctionCallExpr("floor", ImmutableList.of(addExpr));
             }
+        } else if (functionName.equalsIgnoreCase("distinct") && args.length > 1) {
+            FunctionCallExpr concat = new FunctionCallExpr("concat", ImmutableList.copyOf(args));
+            return new FunctionCallExpr("distinct", ImmutableList.of(concat));
         }
         return null;
     }
