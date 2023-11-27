@@ -73,7 +73,8 @@ public:
         const static std::vector<LogicalType> kTypes{
                 TYPE_BOOLEAN,   TYPE_TINYINT,   TYPE_SMALLINT,  TYPE_INT,        TYPE_BIGINT, TYPE_LARGEINT,
                 TYPE_FLOAT,     TYPE_DOUBLE,    TYPE_VARCHAR,   TYPE_CHAR,       TYPE_DATE,   TYPE_DATETIME,
-                TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128, TYPE_HLL,    TYPE_OBJECT};
+                TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128, TYPE_HLL,    TYPE_OBJECT,
+                TYPE_STRUCT};
         return kTypes;
     }
 
