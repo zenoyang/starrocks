@@ -513,6 +513,7 @@ public class FunctionSet {
                     .add(Type.DATE)
                     .add(Type.DATETIME)
                     .add(Type.DECIMALV2)
+                    .add(Type.ANY_STRUCT)
                     .build();
 
     private static final Set<Type> SORTABLE_TYPES =
