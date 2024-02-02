@@ -743,6 +743,12 @@ under the License.
                 <version>${odps.version}</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/com.volcengine/volc-sdk-java -->
+            <dependency>
+                <groupId>com.volcengine</groupId>
+                <artifactId>volc-sdk-java</artifactId>
+                <version>1.0.142</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 

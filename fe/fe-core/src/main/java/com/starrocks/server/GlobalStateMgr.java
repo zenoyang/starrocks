@@ -237,6 +237,7 @@ import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
+import com.starrocks.server.ve.emr.TosBucketTagMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -1477,6 +1478,8 @@ public class GlobalStateMgr {
         slotManager.start();
 
         lockChecker.start();
+
+        TosBucketTagMgr.getInstance().start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {

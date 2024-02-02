@@ -24,6 +24,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.credential.CloudConfigurationConstants;
+import com.starrocks.server.ve.emr.TosBucketTagMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
 import org.apache.logging.log4j.LogManager;
@@ -85,7 +86,9 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             throws DdlException {
         FileStoreInfo fileStoreInfo = StorageVolume.createFileStoreInfo(name, svType,
                 locations, params, enabled.orElse(true), comment);
-        return GlobalStateMgr.getCurrentState().getStarOSAgent().addFileStore(fileStoreInfo);
+        String result = GlobalStateMgr.getCurrentState().getStarOSAgent().addFileStore(fileStoreInfo);
+        TosBucketTagMgr.getInstance().onCreateStorageVolume(svType, locations, params);
+        return result;
     }
 
     @Override
@@ -279,6 +282,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             if (getDefaultStorageVolumeId().isEmpty()) {
                 setDefaultStorageVolume(BUILTIN_STORAGE_VOLUME);
             }
+            TosBucketTagMgr.getInstance().onCreateStorageVolume(Config.cloud_native_storage_type, locations, params);
             return svId;
         }
     }

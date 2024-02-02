@@ -861,6 +861,11 @@ under the License.
             <artifactId>HikariCP</artifactId>
             <version>${hikaricp.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>com.volcengine</groupId>
+            <artifactId>volc-sdk-java</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
