@@ -74,6 +74,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -108,7 +109,8 @@ public class TransactionState implements Writable {
         LAKE_COMPACTION(7),            // compaction of LakeTable
         FRONTEND_STREAMING(8),          // FE streaming load use this type
         MV_REFRESH(9),                  // Refresh MV
-        REPLICATION(10);                // Replication
+        REPLICATION(10),                // Replication
+        BYPASS_WRITE(11);               // Bypass BE, and write data file directly
 
         private final int flag;
 
@@ -121,30 +123,14 @@ public class TransactionState implements Writable {
         }
 
         public static LoadJobSourceType valueOf(int flag) {
-            switch (flag) {
-                case 1:
-                    return FRONTEND;
-                case 2:
-                    return BACKEND_STREAMING;
-                case 3:
-                    return INSERT_STREAMING;
-                case 4:
-                    return ROUTINE_LOAD_TASK;
-                case 5:
-                    return BATCH_LOAD_JOB;
-                case 6:
-                    return DELETE;
-                case 7:
-                    return LAKE_COMPACTION;
-                case 8:
-                    return FRONTEND_STREAMING;
-                case 9:
-                    return MV_REFRESH;
-                case 10:
-                    return REPLICATION;
-                default:
-                    return null;
-            }
+            return Arrays.stream(values())
+                    .filter(sourceType -> sourceType.flag == flag)
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        public int getFlag() {
+            return flag;
         }
     }
 
@@ -827,7 +813,7 @@ public class TransactionState implements Writable {
         }
         out.writeInt(txnCoordinator.sourceType.value());
         Text.writeString(out, txnCoordinator.ip);
-        out.writeInt(transactionStatus.value());
+        out.writeInt(transactionStatus.getFlag());
         out.writeInt(sourceType.value());
         out.writeLong(prepareTime);
         out.writeLong(commitTime);
