@@ -796,6 +796,10 @@ CONF_Int64(object_storage_connect_timeout_ms, "-1");
 // value is greater than 0 and less than 1000.
 // When it's 0, low speed limit check will be disabled.
 CONF_Int64(object_storage_request_timeout_ms, "-1");
+// Retry strategy for read operation. The following two parameters are the default value of Aws
+// DefaultRetryStrategy
+CONF_Int64(object_storage_max_retries, "10");
+CONF_Int64(object_storage_retry_scale_factor, "25");
 
 // text reader
 // Spilt text file's scan range into io ranges of 16mb size

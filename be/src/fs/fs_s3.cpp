@@ -18,6 +18,7 @@
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
 #include <aws/core/client/ClientConfiguration.h>
+#include <aws/core/client/SpecifiedRetryableErrorsRetryStrategy.h>
 #include <aws/identity-management/auth/STSAssumeRoleCredentialsProvider.h>
 #include <aws/s3/model/CopyObjectRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
@@ -205,6 +206,18 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
 
     auto credential_provider = _get_aws_credentials_provider(aws_cloud_credential);
 
+    // clang-format: off
+    static const std::vector<Aws::String> retryable_errors = {
+            // tos qps limit ExceptionName
+            "ExceedAccountQPSLimit",
+            "ExceedAccountRateLimit",
+            "ExceedBucketQPSLimit",
+            "ExceedBucketRateLimit"};
+    // clang-format: on
+    config.retryStrategy = std::make_shared<Aws::Client::SpecifiedRetryableErrorsRetryStrategy>(
+            retryable_errors,
+            /* maxRetries = */ config::object_storage_max_retries,
+            /* scaleFactor = */ config::object_storage_retry_scale_factor);
     S3ClientPtr client = std::make_shared<Aws::S3::S3Client>(
             credential_provider, config, Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, !path_style_access);
 
@@ -326,6 +339,18 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const F
     if (config::object_storage_request_timeout_ms >= 0) {
         config.requestTimeoutMs = config::object_storage_request_timeout_ms;
     }
+    // clang-format: off
+    static const std::vector<Aws::String> retryable_errors = {
+            // tos qps limit ExceptionName
+            "ExceedAccountQPSLimit",
+            "ExceedAccountRateLimit",
+            "ExceedBucketQPSLimit",
+            "ExceedBucketRateLimit"};
+    // clang-format: on
+    config.retryStrategy = std::make_shared<Aws::Client::SpecifiedRetryableErrorsRetryStrategy>(
+            retryable_errors,
+            /* maxRetries = */ config::object_storage_max_retries,
+            /* scaleFactor = */ config::object_storage_retry_scale_factor);
     return S3ClientFactory::instance().new_client(config, opts);
 }
 
