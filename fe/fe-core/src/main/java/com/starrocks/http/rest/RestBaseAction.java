@@ -51,6 +51,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -59,12 +60,19 @@ import java.net.URISyntaxException;
 import java.util.function.Function;
 
 public class RestBaseAction extends BaseAction {
-    protected static final String CATALOG_KEY = "catalog";
 
+    private static final Logger LOG = LogManager.getLogger(RestBaseAction.class);
+
+    protected static final String CATALOG_KEY = "catalog";
     protected static final String DB_KEY = "db";
     protected static final String TABLE_KEY = "table";
     protected static final String LABEL_KEY = "label";
-    private static final Logger LOG = LogManager.getLogger(RestBaseAction.class);
+
+    protected static final String PAGE_NUM_KEY = "page_num";
+    protected static final String PAGE_SIZE_KEY = "page_size";
+
+    protected static final int DEFAULT_PAGE_NUM = 0;
+    protected static final int DEFAULT_PAGE_SIZE = 100;
 
     protected static final String JSON_CONTENT_TYPE = "application/json; charset=UTF-8";
     protected static ObjectMapper mapper = new ObjectMapper();
@@ -209,5 +217,19 @@ public class RestBaseAction extends BaseAction {
                     HttpResponseStatus.BAD_REQUEST, String.format("Missing parameter %s", paramName));
         }
         return function.apply(value);
+    }
+
+    protected static int getPageNum(BaseRequest request) {
+        return getParameter(request, PAGE_NUM_KEY, DEFAULT_PAGE_NUM, value -> {
+            int pn = NumberUtils.toInt(value, DEFAULT_PAGE_NUM);
+            return pn <= 0 ? DEFAULT_PAGE_NUM : pn;
+        });
+    }
+
+    protected static int getPageSize(BaseRequest request) {
+        return getParameter(request, PAGE_SIZE_KEY, DEFAULT_PAGE_SIZE, value -> {
+            int ps = NumberUtils.toInt(value, DEFAULT_PAGE_SIZE);
+            return ps <= 0 ? DEFAULT_PAGE_SIZE : ps;
+        });
     }
 }

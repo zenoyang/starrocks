@@ -21,6 +21,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.http.rest.RestBaseResult;
 
+import java.util.List;
 import java.util.Objects;
 
 public class RestBaseResultV2<T> extends RestBaseResult {
@@ -33,6 +34,12 @@ public class RestBaseResultV2<T> extends RestBaseResult {
 
     public RestBaseResultV2(String msg) {
         super(msg);
+    }
+
+    public static <R> RestBaseResultV2<R> ok(R result) {
+        RestBaseResultV2<R> obj = new RestBaseResultV2<>();
+        obj.result = result;
+        return obj;
     }
 
     public RestBaseResultV2(T result) {
@@ -68,5 +75,75 @@ public class RestBaseResultV2<T> extends RestBaseResult {
 
     public T getResult() {
         return result;
+    }
+
+    /**
+     * Paged result.
+     */
+    public static class PagedResult<T> {
+
+        @SerializedName("pageNum")
+        private Integer pageNum;
+
+        @SerializedName("pageSize")
+        private Integer pageSize;
+
+        /**
+         * Total pages.
+         */
+        @SerializedName("pages")
+        private Integer pages;
+
+        /**
+         * Total elements.
+         */
+        @SerializedName("total")
+        private Integer total;
+
+        @SerializedName("items")
+        private List<T> items;
+
+        public PagedResult() {
+        }
+
+        public Integer getPageNum() {
+            return pageNum;
+        }
+
+        public void setPageNum(Integer pageNum) {
+            this.pageNum = pageNum;
+        }
+
+        public Integer getPageSize() {
+            return pageSize;
+        }
+
+        public void setPageSize(Integer pageSize) {
+            this.pageSize = pageSize;
+        }
+
+        public Integer getPages() {
+            return pages;
+        }
+
+        public void setPages(Integer pages) {
+            this.pages = pages;
+        }
+
+        public Integer getTotal() {
+            return total;
+        }
+
+        public void setTotal(Integer total) {
+            this.total = total;
+        }
+
+        public List<T> getItems() {
+            return items;
+        }
+
+        public void setItems(List<T> items) {
+            this.items = items;
+        }
     }
 }

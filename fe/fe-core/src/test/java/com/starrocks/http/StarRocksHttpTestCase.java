@@ -117,13 +117,13 @@ public abstract class StarRocksHttpTestCase {
     protected static long testBackendId2 = 1001;
     protected static long testBackendId3 = 1002;
 
-    private static long testReplicaId1 = 2000;
-    private static long testReplicaId2 = 2001;
-    private static long testReplicaId3 = 2002;
+    protected static long testReplicaId1 = 2000;
+    protected static long testReplicaId2 = 2001;
+    protected static long testReplicaId3 = 2002;
 
     protected static long testDbId = 100L;
     protected static long testTableId = 200L;
-    private static long testPartitionId = 201L;
+    protected static long testPartitionId = 201L;
     public static long testIndexId = testTableId; // the base indexid == tableid
     protected static long tabletId = 400L;
 
@@ -134,7 +134,6 @@ public abstract class StarRocksHttpTestCase {
 
     protected static String URI;
     protected static String BASE_URL;
-
     protected static final String AUTH_KEY = "Authorization";
     protected String rootAuth = Credentials.basic("root", "");
 
@@ -461,7 +460,7 @@ public abstract class StarRocksHttpTestCase {
     }
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         GlobalStateMgr globalStateMgr = newDelegateCatalog();
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
@@ -495,7 +494,7 @@ public abstract class StarRocksHttpTestCase {
         doSetUp();
     }
 
-    public void setUpWithCatalog() {
+    public void setUpWithCatalog() throws Exception {
         GlobalStateMgr globalStateMgr = newDelegateGlobalStateMgr();
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
@@ -554,7 +553,7 @@ public abstract class StarRocksHttpTestCase {
         httpServer.shutDown();
     }
 
-    protected void doSetUp() {
+    protected void doSetUp() throws Exception {
 
     }
 
