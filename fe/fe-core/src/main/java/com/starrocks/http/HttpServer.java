@@ -223,6 +223,7 @@ public class HttpServer {
         // external usage
         TableRowCountAction.registerAction(controller);
         TableSchemaAction.registerAction(controller);
+        com.starrocks.http.rest.v2.TableSchemaAction.registerAction(controller);
         TableQueryPlanAction.registerAction(controller);
 
         BootstrapFinishAction.registerAction(controller);

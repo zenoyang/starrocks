@@ -111,6 +111,8 @@ public abstract class StarRocksHttpTestCase {
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
 
+    protected static final String ES_TABLE_NAME = "es_table";
+
     protected static long testBackendId1 = 1000;
     protected static long testBackendId2 = 1001;
     protected static long testBackendId3 = 1002;
@@ -271,7 +273,7 @@ public abstract class StarRocksHttpTestCase {
             db.registerTableUnlocked(table);
             OlapTable table1 = newTable(TABLE_NAME + 1);
             db.registerTableUnlocked(table1);
-            EsTable esTable = newEsTable("es_table");
+            EsTable esTable = newEsTable(ES_TABLE_NAME);
             db.registerTableUnlocked(esTable);
             OlapTable newEmptyTable = newEmptyTable("test_empty_table");
             db.registerTableUnlocked(newEmptyTable);
@@ -346,7 +348,7 @@ public abstract class StarRocksHttpTestCase {
             db.registerTableUnlocked(table);
             OlapTable table1 = newTable(TABLE_NAME + 1);
             db.registerTableUnlocked(table1);
-            EsTable esTable = newEsTable("es_table");
+            EsTable esTable = newEsTable(ES_TABLE_NAME);
             db.registerTableUnlocked(esTable);
             OlapTable newEmptyTable = newEmptyTable("test_empty_table");
             db.registerTableUnlocked(newEmptyTable);

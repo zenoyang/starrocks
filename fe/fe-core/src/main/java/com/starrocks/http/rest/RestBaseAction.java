@@ -37,6 +37,7 @@ package com.starrocks.http.rest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseAction;
@@ -49,11 +50,13 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.function.Function;
 
 public class RestBaseAction extends BaseAction {
     protected static final String CATALOG_KEY = "catalog";
@@ -63,6 +66,7 @@ public class RestBaseAction extends BaseAction {
     protected static final String LABEL_KEY = "label";
     private static final Logger LOG = LogManager.getLogger(RestBaseAction.class);
 
+    protected static final String JSON_CONTENT_TYPE = "application/json; charset=UTF-8";
     protected static ObjectMapper mapper = new ObjectMapper();
 
     public RestBaseAction(ActionController controller) {
@@ -119,16 +123,26 @@ public class RestBaseAction extends BaseAction {
     }
 
     public void sendResult(BaseRequest request, BaseResponse response, RestBaseResult result) {
-        response.appendContent(result.toJson());
-        writeResponse(request, response, HttpResponseStatus.OK);
+        sendResult(request, response, HttpResponseStatus.OK, result);
     }
 
     public void sendResult(BaseRequest request, BaseResponse response, HttpResponseStatus status) {
-        writeResponse(request, response, status);
+        sendResult(request, response, status, null);
     }
 
     public void sendResult(BaseRequest request, BaseResponse response) {
-        writeResponse(request, response, HttpResponseStatus.OK);
+        sendResult(request, response, HttpResponseStatus.OK);
+    }
+
+    public void sendResult(BaseRequest request,
+                           BaseResponse response,
+                           HttpResponseStatus status,
+                           RestBaseResult result) {
+        if (null != result) {
+            response.setContentType(JSON_CONTENT_TYPE);
+            response.appendContent(result.toJson());
+        }
+        writeResponse(request, response, status);
     }
 
     public void sendResultByJson(BaseRequest request, BaseResponse response, Object obj) {
@@ -140,7 +154,7 @@ public class RestBaseAction extends BaseAction {
         }
 
         // send result
-        response.setContentType("application/json");
+        response.setContentType(JSON_CONTENT_TYPE);
         response.getContent().append(result);
         sendResult(request, response);
     }
@@ -171,5 +185,29 @@ public class RestBaseAction extends BaseAction {
         redirectTo(request, response,
                 new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
         return true;
+    }
+
+    protected static String getParameter(BaseRequest request, String paramName) {
+        return getParameter(request, paramName, value -> value);
+    }
+
+    protected static <T> T getParameter(BaseRequest request, String paramName, Function<String, T> function) {
+        return getParameter(request, paramName, null, function);
+    }
+
+    protected static <T> T getParameter(BaseRequest request,
+                                        String paramName,
+                                        T defaultValueIfBlank,
+                                        Function<String, T> function) {
+        String value = request.getSingleParameter(paramName);
+        if (StringUtils.isBlank(value)) {
+            if (null != defaultValueIfBlank) {
+                return defaultValueIfBlank;
+            }
+
+            throw new StarRocksHttpException(
+                    HttpResponseStatus.BAD_REQUEST, String.format("Missing parameter %s", paramName));
+        }
+        return function.apply(value);
     }
 }
