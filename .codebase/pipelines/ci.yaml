@@ -5,7 +5,7 @@ trigger:
 
 jobs:
   ut-fe:
-    image:  hub.byted.org/compile/starrocks-3.2:9b6de884158dd4492302e3ef565e428f
+    image: hub.byted.org/compile/starrocks-3.2:fba559edda9ec6ddb27bc557758bba1d
     working-directory: emr-core/StarRocks
     runs-on:
       spec: m1.8xlarge
@@ -16,7 +16,7 @@ jobs:
           - cp .codebase/settings.xml /root/.m2/
           - sh run-fe-ut.sh
   ut-be:
-    image:  hub.byted.org/compile/starrocks-3.2:9b6de884158dd4492302e3ef565e428f
+    image: hub.byted.org/compile/starrocks-3.2:fba559edda9ec6ddb27bc557758bba1d
     working-directory: emr-core/StarRocks
     runs-on:
       spec: m1.8xlarge
