@@ -141,7 +141,7 @@ public class TableDetailAction extends RestBaseAction {
     private TableDetailDto.SchemaInfoDto generateSchemaInfo(Table tbl, boolean withMv) {
         TableDetailDto.SchemaInfoDto schemaInfoDto = new TableDetailDto.SchemaInfoDto();
         Map<String, TableDetailDto.TableSchemaDto> schemaMap = Maps.newHashMap();
-        if (tbl.getType() == Table.TableType.OLAP) {
+        if (tbl.isOlapOrCloudNativeTable()) {
             OlapTable olapTable = (OlapTable) tbl;
             long baseIndexId = olapTable.getBaseIndexId();
             TableDetailDto.TableSchemaDto baseTableSchemaDto = new TableDetailDto.TableSchemaDto();
