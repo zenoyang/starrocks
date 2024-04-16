@@ -28,7 +28,7 @@ fi
 
 # build fe and be
 mkdir -p /root/.m2 && cp ./docker/ve-emr/settings.xml  ~/.m2/settings.xml
-export BUILD_TYPE=Release && export STARROCKS_VERSION=3.2.3-ve-1 && ./build.sh --fe --be --spark-dpp --use-staros
+export BUILD_TYPE=Release && export STARROCKS_VERSION=3.2.3-ve-3 && ./build.sh --fe --be --spark-dpp --use-staros
 
 # build broker
 STARROCKS_OUTPUT=${ROOT}/output/
