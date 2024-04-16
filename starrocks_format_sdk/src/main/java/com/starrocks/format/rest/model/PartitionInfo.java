@@ -15,17 +15,38 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.format;
+package com.starrocks.format.rest.model;
 
-public class JniException extends Exception {
-    private final int errorCode;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
-    public JniException(int code, String message) {
-        super(message);
-        this.errorCode = code;
+import java.util.List;
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class PartitionInfo {
+
+    @JsonProperty("type")
+    private String type;
+
+    @JsonProperty("partitionColumns")
+    private List<Column> partitionColumns;
+
+    public PartitionInfo() {
     }
 
-    public int getErrorCode() {
-        return errorCode;
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public List<Column> getPartitionColumns() {
+        return partitionColumns;
+    }
+
+    public void setPartitionColumns(List<Column> partitionColumns) {
+        this.partitionColumns = partitionColumns;
     }
 }

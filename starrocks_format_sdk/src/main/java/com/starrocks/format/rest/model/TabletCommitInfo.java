@@ -15,17 +15,40 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.format;
+package com.starrocks.format.rest.model;
 
-public class JniException extends Exception {
-    private final int errorCode;
 
-    public JniException(int code, String message) {
-        super(message);
-        this.errorCode = code;
+import java.io.Serializable;
+
+public class TabletCommitInfo implements Serializable {
+
+    private static final long serialVersionUID = 8431256353347497743L;
+
+    private Long tabletId;
+
+    private Long backendId;
+
+    public TabletCommitInfo() {
     }
 
-    public int getErrorCode() {
-        return errorCode;
+    public TabletCommitInfo(Long tabletId, Long backendId) {
+        this.tabletId = tabletId;
+        this.backendId = backendId;
+    }
+
+    public Long getTabletId() {
+        return tabletId;
+    }
+
+    public void setTabletId(Long tabletId) {
+        this.tabletId = tabletId;
+    }
+
+    public Long getBackendId() {
+        return backendId;
+    }
+
+    public void setBackendId(Long backendId) {
+        this.backendId = backendId;
     }
 }

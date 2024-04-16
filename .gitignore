@@ -82,4 +82,5 @@ be/tags
 build/
 cmake-build-debug/
 starrocks_format_sdk/target/
+starrocks_format_sdk/**/starrocks_conn.properties
 

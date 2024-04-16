@@ -13,26 +13,39 @@
 // limitations under the License.
 
 
-package com.starrocks.format.rest.models;
+package com.starrocks.format.rest.model;
 
-public class TabletFailInfo {
+import java.io.Serializable;
 
-    private final long tabletId;
+public class TabletFailInfo implements Serializable {
 
-    private final long backendId;
+    private static final long serialVersionUID = -9209558728067591603L;
 
-    public TabletFailInfo(long tabletId, long backendId) {
-        super();
+    private Long tabletId;
+
+    private Long backendId;
+
+    public TabletFailInfo() {
+    }
+
+    public TabletFailInfo(Long tabletId, Long backendId) {
         this.tabletId = tabletId;
         this.backendId = backendId;
     }
 
-    public long getTabletId() {
+    public Long getTabletId() {
         return tabletId;
     }
 
-    public long getBackendId() {
+    public void setTabletId(Long tabletId) {
+        this.tabletId = tabletId;
+    }
+
+    public Long getBackendId() {
         return backendId;
     }
 
+    public void setBackendId(Long backendId) {
+        this.backendId = backendId;
+    }
 }

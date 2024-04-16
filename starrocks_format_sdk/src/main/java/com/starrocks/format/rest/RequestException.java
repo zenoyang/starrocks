@@ -15,17 +15,22 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.format;
+package com.starrocks.format.rest;
 
-public class JniException extends Exception {
-    private final int errorCode;
+import org.apache.http.client.methods.HttpRequestBase;
 
-    public JniException(int code, String message) {
-        super(message);
-        this.errorCode = code;
+public class RequestException extends Exception {
+
+    public RequestException(HttpRequestBase request, String message) {
+        super(wrapMessage(request, message));
     }
 
-    public int getErrorCode() {
-        return errorCode;
+    public RequestException(HttpRequestBase request, String message, Throwable cause) {
+        super(wrapMessage(request, message), cause);
     }
+
+    private static String wrapMessage(HttpRequestBase request, String message) {
+        return String.format("%s error, reason: %s", request.toString(), message);
+    }
+
 }

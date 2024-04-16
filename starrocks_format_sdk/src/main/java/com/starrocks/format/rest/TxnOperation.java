@@ -15,17 +15,33 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.format;
+package com.starrocks.format.rest;
 
-public class JniException extends Exception {
-    private final int errorCode;
+/**
+ * Transaction operation for request.
+ */
+public enum TxnOperation {
 
-    public JniException(int code, String message) {
-        super(message);
-        this.errorCode = code;
+    TXN_BEGIN("begin"),
+
+    TXN_PREPARE("prepare"),
+
+    TXN_COMMIT("commit"),
+
+    TXN_ROLLBACK("rollback");
+
+    private final String value;
+
+    TxnOperation(String value) {
+        this.value = value;
     }
 
-    public int getErrorCode() {
-        return errorCode;
+    @Override
+    public String toString() {
+        return getValue();
+    }
+
+    public String getValue() {
+        return value;
     }
 }

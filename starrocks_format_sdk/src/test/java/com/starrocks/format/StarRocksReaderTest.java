@@ -1,13 +1,29 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
 package com.starrocks.format;
 
-import com.starrocks.format.rest.RestService;
-import com.starrocks.format.rest.models.EtlJobConfig;
-import com.starrocks.format.rest.models.TabletCommitInfo;
+import com.starrocks.format.rest.model.TablePartition;
 import com.starrocks.proto.TabletSchema;
+import com.starrocks.proto.TabletSchema.ColumnPB;
+import com.starrocks.proto.TabletSchema.TabletSchemaPB;
 import com.starrocks.proto.Types.CompressionTypePB;
-import org.junit.Assert;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.apache.commons.lang3.RandomUtils;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -21,41 +37,28 @@ import java.math.RoundingMode;
 import java.nio.file.Path;
 import java.sql.Date;
 import java.sql.Timestamp;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TimeZone;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
-public class StarrocksReaderTest {
 
-    @BeforeEach
-    public void setUp() {
+public class StarRocksReaderTest extends BaseFormatTest {
+
+    @BeforeAll
+    public static void init() throws Exception {
+        BaseFormatTest.init();
     }
 
-    @AfterEach
-    public void tearDown() {
-    }
-
-    class ColumnType {
-        public ColumnType(String typeName, int length) {
-            this.typeName = typeName;
-            this.length = length;
-        }
-
-        public ColumnType(String typeName, int length, int precision, int scale) {
-            this.typeName = typeName;
-            this.length = length;
-            this.precision = precision;
-            this.scale = scale;
-        }
-
-        public String typeName;
-        public int length;
-        public int precision;
-        public int scale;
-    }
-
-    static Stream<Arguments> testRead() {
+    private static Stream<Arguments> testRead() {
         return Stream.of(
                 Arguments.of("tb_all_primitivetype_read_duplicate", 3, 5),
                 Arguments.of("tb_all_primitivetype_read_unique", 3, 5),
@@ -70,56 +73,46 @@ public class StarrocksReaderTest {
 
     @ParameterizedTest
     @MethodSource
-    public void testRead(String tableName, int version, int expectedNumRows) {
-        Map<String, String> envs = new HashMap<>();
-        envs.put("db", "demo");
-        envs.put("table", tableName);
-
-        // get schema and shard info
-        com.starrocks.format.rest.models.Schema srSchema = RestService.getShardInfo(envs);
-        TabletSchema.TabletSchemaPB pbSchema = srSchema.getEtlTable().convert();
+    public void testRead(String tableName, int version, int expectedNumRows) throws Exception {
+        TabletSchemaPB tabletSchema = toPbTabletSchema(restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName));
+        List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
+        assertFalse(partitions.isEmpty());
 
         // read chunk
         long totalRows = 0;
-        for(EtlJobConfig.EtlPartition partition: srSchema.getEtlTable().getPartitionInfo().getPartitions()) {
-            for (int i = 0; i < partition.getTabletIds().size(); i++) {
-                long tabletId = partition.getTabletIds().get(i);
+        for (TablePartition partition : partitions) {
+            for (TablePartition.Tablet tablet : partition.getTablets()) {
+                Long tabletId = tablet.getId();
 
-                Map<String, String> options = new HashMap<>();
-                options.put("fs.s3a.endpoint", "http://127.0.0.1:9000");
-                options.put("fs.s3a.endpoint.region", "cn-beijing");
-                options.put("fs.s3a.connection.ssl.enabled", "false");
-                options.put("fs.s3a.path.style.access", "false");
-                options.put("fs.s3a.access.key", "minio_access_key");
-                options.put("fs.s3a.secret.key", "minio_secret_key");
-
-                StarrocksReader reader = new StarrocksReader(tabletId, version, pbSchema, partition.getStoragePath(), options);
+                StarRocksReader reader = new StarRocksReader(
+                        tabletId, version, tabletSchema, partition.getStoragePath(), settings.toMap());
                 reader.open();
 
-                int numRows = 0;
+                long numRows;
                 do {
                     Chunk chunk = reader.getNext();
-                    numRows = (int) chunk.numRow();
+                    numRows = chunk.numRow();
 
-                    checkValue(pbSchema, chunk, numRows);
+                    checkValue(tabletSchema, chunk, numRows);
                     chunk.release();
 
                     totalRows += numRows;
-                } while(numRows > 0);
+                } while (numRows > 0);
 
                 // should be empty chunk
                 Chunk chunk = reader.getNext();
-                Assert.assertEquals("row number should be 0", 0, chunk.numRow());
+                assertEquals(0, chunk.numRow());
                 chunk.release();
 
                 reader.close();
                 reader.release();
             }
         }
-        Assert.assertEquals("row number should be " + expectedNumRows, expectedNumRows, totalRows);
+
+        assertEquals(expectedNumRows, totalRows);
     }
 
-    static Stream<Arguments> testReadWithFilter() {
+    private static Stream<Arguments> testReadWithFilter() {
         return Stream.of(
                 // key filter and non-key filter: rowId > 1 and (c_tinyint + c_smallint) > -50
                 Arguments.of("tb_all_primitivetype_read_duplicate", 3, 2, "DAABDAACDwABDAAAAAEIAAEAAAAACAACAAAAIAgAAwAAAAAKAAT//////////w8ABQgAAAABAAAAAA8ABgIAAAABAA8ABwwAAAACDwABDAAAAAMIAAEAAAACDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAAAgAAAAgAAwAAAA0IAAQAAAACCAAU/////wgAGQAAAAAIABwAAAAFAgAzAQIANAECADYBAAgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAFAAAACAAEAAAAAAwADwgAAQAAAAEIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAgAAQAAAAkMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAFAAAACAAEAAAAAAwACgoAAQAAAAAAAAABAAgAFP////8CADMAAgA0AAIANgEAAA8AAQwAAAAHCAABAAAAAgwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAAAIAAAAIAAMAAAANCAAEAAAAAggAFP////8IABkAAAAACAAcAAAABQIAMwECADQBAgA2AAAIAAEAAAABDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAABQAAAAgAAwAAADQIAAQAAAACCAAU/////wgAF/////8CADMBAgA0AQIANgAACAABAAAABQwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAAAUAAAAIAAMAAAAECAAEAAAAAQgAFP////8IABf/////CAAcAAAAAwIAMwECADQBAgA2AAAIAAEAAAAQDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAAAwAAAAgABAAAAAAMAA8IAAEAAAADCAACAAAAAAAIABT/////CAAX/////wIAMwACADQBAgA2AQAIAAEAAAAFDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAABQAAAAgAAwAAAAQIAAQAAAABCAAU/////wgAF/////8IABwAAAAEAgAzAQIANAECADYAAAgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAEAAAACAAEAAAAAAwADwgAAQAAAAQIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAgAAQAAAAkMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAFAAAACAAEAAAAAAwACgoAAf/////////OAAgAFP////8CADMAAgA0AAIANgEAAAIACAACADMBDgA5CAAAAAACADsADAA/CAABAAAAAA8AAgsAAAABAAAABXJvd0lkDwADCAAAAAEAAAAFAgAEAQsABgAAACN0Yl9hbGxfcHJpbWl0aXZldHlwZV9yZWFkX2R1cGxpY2F0ZQsABwAAAEoxOiByb3dJZCA+IDEsIENBU1QoMzogY190aW55aW50IEFTIElOVCkgKyBDQVNUKDQ6IGNfc21hbGxpbnQgQVMgSU5UKSA+IC01MAIACAENAAkICAAAAAAPAAoLAAAAAA8ACwsAAAABAAAABXJvd0lkAAAADwAEDAAAABAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAFAAAACAAEAAAAAAwADwgAAQAAAAEIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAACAAAACAAEAAAAAAwADwgAAQAAAAIIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAADAAAACAAEAAAAAAwADwgAAQAAAAMIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAEAAAACAAEAAAAAAwADwgAAQAAAAQIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAFAAAACAAEAAAAAAwADwgAAQAAAAUIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAGAAAACAAEAAAAAAwADwgAAQAAAAYIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAOAAAACAAEAAAAAAwADwgAAQAAAAcIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAHAAAACAAEAAAAAAwADwgAAQAAAAgIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAIAAAACAAEAAAAAAwADwgAAQAAAAkIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAJAAAACAAEAAAAAAwADwgAAQAAAAoIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAKAAAACAAEAAAAAAwADwgAAQAAAAsIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAVCAADAAAACQgABAAAAAIAAAAIAAQAAAAADAAPCAABAAAADAgAAgAAAAAACAAU/////wgAF/////8CADMAAgA0AQIANgEAAA8AAQwAAAABCAABAAAAEAwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAABYIAAMAAAASCAAEAAAAAwAAAAgABAAAAAAMAA8IAAEAAAANCAACAAAAAAAIABT/////CAAX/////wIAMwACADQBAgA2AQAADwABDAAAAAEIAAEAAAAQDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAAFwgAAwAAACYIAAQAAAAEAAAACAAEAAAAAAwADwgAAQAAAA4IAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAPCAAC/////wAAAAgABAAAAAAMAA8IAAEAAAAPCAACAAAAAAAIABT/////CAAX/////wIAMwACADQBAgA2AQAADwABDAAAAAEIAAEAAAAQDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAADwgAAv////8AAAAIAAQAAAAADAAPCAABAAAAEAgAAgAAAAAACAAU/////wgAF/////8CADMAAgA0AQIANgEAAAwABQgAAQAAAAYMAAgAAAwABggAAQAAAAEPAAIMAAAAAAAADQACCgwAAAADAAAAAAAAM5MKAAEAAAAAAAAzkwoAAgAAAAAAAAADCgADAAAAAAAAAAAIAAQVj2d0AAAAAAAAADOUCgABAAAAAAAAM5QKAAIAAAAAAAAAAwoAAwAAAAAAAAAACAAEFY9ndAAAAAAAAAAzlQoAAQAAAAAAADOVCgACAAAAAAAAAAMKAAMAAAAAAAAAAAgABBWPZ3QADAADDwABDAAAABAIAAEAAAABCAACAAAAAAwAAw8AAQwAAAABCAABAAAAAAwAAggAAQAAAAUAAAAIAAT/////CAAF/////wgABv////8IAAcAAAABCwAIAAAABXJvd0lkCAAJ/////wIACgECAAsAAAgAAQAAAAIIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAAAgAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAJY19ib29sZWFuCAAJ/////wIACgECAAsAAAgAAQAAAAMIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAAAwAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAJY190aW55aW50CAAJ/////wIACgECAAsAAAgAAQAAAAQIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAABAAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAKY19zbWFsbGludAgACf////8CAAoBAgALAAAIAAEAAAAFCAACAAAAAAwAAw8AAQwAAAABCAABAAAAAAwAAggAAQAAAAUAAAAIAAT/////CAAF/////wgABv////8IAAcAAAABCwAIAAAABWNfaW50CAAJ/////wIACgECAAsAAAgAAQAAAAYIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAABgAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAIY19iaWdpbnQIAAn/////AgAKAQIACwAACAABAAAABwgAAgAAAAAMAAMPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAOAAAACAAE/////wgABf////8IAAb/////CAAHAAAAAQsACAAAAApjX2xhcmdlaW50CAAJ/////wIACgECAAsAAAgAAQAAAAgIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAABwAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAHY19mbG9hdAgACf////8CAAoBAgALAAAIAAEAAAAJCAACAAAAAAwAAw8AAQwAAAABCAABAAAAAAwAAggAAQAAAAgAAAAIAAT/////CAAF/////wgABv////8IAAcAAAABCwAIAAAACGNfZG91YmxlCAAJ/////wIACgECAAsAAAgAAQAAAAoIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAACQAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAGY19kYXRlCAAJ/////wIACgECAAsAAAgAAQAAAAsIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAACgAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAKY19kYXRldGltZQgACf////8CAAoBAgALAAAIAAEAAAAMCAACAAAAAAwAAw8AAQwAAAABCAABAAAAAAwAAggAAQAAABUIAAMAAAAJCAAEAAAAAgAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAALY19kZWNpbWFsMzIIAAn/////AgAKAQIACwAACAABAAAADQgAAgAAAAAMAAMPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAWCAADAAAAEggABAAAAAMAAAAIAAT/////CAAF/////wgABv////8IAAcAAAABCwAIAAAAC2NfZGVjaW1hbDY0CAAJ/////wIACgECAAsAAAgAAQAAAA4IAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAAFwgAAwAAACYIAAQAAAAEAAAACAAE/////wgABf////8IAAb/////CAAHAAAAAQsACAAAAAxjX2RlY2ltYWwxMjgIAAn/////AgAKAQIACwAACAABAAAADwgAAgAAAAAMAAMPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAANCAACAAAAgAAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAGY19jaGFyCAAJ/////wIACgECAAsAAAgAAQAAABAIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAADwgAAgAAAgAAAAAIAAT/////CAAF/////wgABv////8IAAcAAAABCwAIAAAACWNfdmFyY2hhcggACf////8CAAoBAgALAAAPAAIMAAAAAQgAAQAAAAAIAAL/////CAAD/////woABAAAAAAAADORCAAF/////wAPAAMMAAAAAQoAAQAAAAAAADORCAACAAAAAQgAAwAAABAIAAQAAAAACwAHAAAAI3RiX2FsbF9wcmltaXRpdmV0eXBlX3JlYWRfZHVwbGljYXRlCwAIAAAAAAwACwsAAQAAACN0Yl9hbGxfcHJpbWl0aXZldHlwZV9yZWFkX2R1cGxpY2F0ZQAAAAwABAoAAe+7G+JLaEgkCgACppvkP8r32e4AAA=="),
@@ -153,146 +146,125 @@ public class StarrocksReaderTest {
                 Arguments.of("tb_all_primitivetype_read_two_key_primary", 4, 1, "DAABDAACDwABDAAAAAEIAAEAAAAACAACAAAAIAgAAwAAAAAKAAT//////////w8ABQgAAAABAAAAAA8ABgIAAAABAA8ABwwAAAABDwABDAAAAAMIAAEAAAACDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAAAgAAAAgAAwAAAAkIAAQAAAACCAAU/////wgAGQAAAAAIABwAAAAKAgAzAQIANAECADYAAAgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAKAAAACAAEAAAAAAwADwgAAQAAAAwIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAgAAQAAAAcMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAKAAAACAAEAAAAAAwACAsAAQAAABMyMDE5LTEyLTMwIDIyOjMzOjQ0AAgAFP////8CADMAAgA0AAIANgEAAAIACAACADMBDgA5CAAAAAACADsADAA/CAABAAAAAA8AAgsAAAACAAAABXJvd0lkAAAABnJvd0lkMg8AAwgAAAACAAAABQAAAAUCAAQBCwAGAAAAKXRiX2FsbF9wcmltaXRpdmV0eXBlX3JlYWRfdHdvX2tleV9wcmltYXJ5CwAHAAAAJjEyOiBjX2RhdGV0aW1lID0gJzIwMTktMTItMzAgMjI6MzM6NDQnAgAIAQ0ACQgIAAAAAA8ACgsAAAAADwALCwAAAAIAAAAFcm93SWQAAAAGcm93SWQyAAAADwAEDAAAABEPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAFAAAACAAEAAAAAAwADwgAAQAAAAEIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAACADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAFAAAACAAEAAAAAAwADwgAAQAAAAIIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAACADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAACAAAACAAEAAAAAAwADwgAAQAAAAMIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAADAAAACAAEAAAAAAwADwgAAQAAAAQIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAEAAAACAAEAAAAAAwADwgAAQAAAAUIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAFAAAACAAEAAAAAAwADwgAAQAAAAYIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAGAAAACAAEAAAAAAwADwgAAQAAAAcIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAOAAAACAAEAAAAAAwADwgAAQAAAAgIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAHAAAACAAEAAAAAAwADwgAAQAAAAkIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAIAAAACAAEAAAAAAwADwgAAQAAAAoIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAJAAAACAAEAAAAAAwADwgAAQAAAAsIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAKAAAACAAEAAAAAAwADwgAAQAAAAwIAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAVCAADAAAACQgABAAAAAIAAAAIAAQAAAAADAAPCAABAAAADQgAAgAAAAAACAAU/////wgAF/////8CADMAAgA0AQIANgEAAA8AAQwAAAABCAABAAAAEAwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAABYIAAMAAAASCAAEAAAAAwAAAAgABAAAAAAMAA8IAAEAAAAOCAACAAAAAAAIABT/////CAAX/////wIAMwACADQBAgA2AQAADwABDAAAAAEIAAEAAAAQDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAAFwgAAwAAACYIAAQAAAAEAAAACAAEAAAAAAwADwgAAQAAAA8IAAIAAAAAAAgAFP////8IABf/////AgAzAAIANAECADYBAAAPAAEMAAAAAQgAAQAAABAMAAIPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAPCAAC/////wAAAAgABAAAAAAMAA8IAAEAAAAQCAACAAAAAAAIABT/////CAAX/////wIAMwACADQBAgA2AQAADwABDAAAAAEIAAEAAAAQDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAADwgAAv////8AAAAIAAQAAAAADAAPCAABAAAAEQgAAgAAAAAACAAU/////wgAF/////8CADMAAgA0AQIANgEAAAwABQgAAQAAAAYMAAgAAAwABggAAQAAAAEPAAIMAAAAAAAADQACCgwAAAADAAAAAAAAKyMKAAEAAAAAAAArIwoAAgAAAAAAAAAECgADAAAAAAAAAAAIAARyeG3gAAAAAAAAACskCgABAAAAAAAAKyQKAAIAAAAAAAAABAoAAwAAAAAAAAAACAAEcnht4AAAAAAAAAArJQoAAQAAAAAAACslCgACAAAAAAAAAAQKAAMAAAAAAAAAAAgABHJ4beAADAADDwABDAAAABEIAAEAAAABCAACAAAAAAwAAw8AAQwAAAABCAABAAAAAAwAAggAAQAAAAUAAAAIAAT/////CAAF/////wgABv////8IAAf/////CwAIAAAABXJvd0lkCAAJ/////wIACgECAAsAAAgAAQAAAAIIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAABQAAAAgABP////8IAAX/////CAAG/////wgAB/////8LAAgAAAAGcm93SWQyCAAJ/////wIACgECAAsAAAgAAQAAAAMIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAAAgAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAJY19ib29sZWFuCAAJ/////wIACgECAAsAAAgAAQAAAAQIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAAAwAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAJY190aW55aW50CAAJ/////wIACgECAAsAAAgAAQAAAAUIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAABAAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAKY19zbWFsbGludAgACf////8CAAoBAgALAAAIAAEAAAAGCAACAAAAAAwAAw8AAQwAAAABCAABAAAAAAwAAggAAQAAAAUAAAAIAAT/////CAAF/////wgABv////8IAAcAAAABCwAIAAAABWNfaW50CAAJ/////wIACgECAAsAAAgAAQAAAAcIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAABgAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAIY19iaWdpbnQIAAn/////AgAKAQIACwAACAABAAAACAgAAgAAAAAMAAMPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAOAAAACAAE/////wgABf////8IAAb/////CAAHAAAAAQsACAAAAApjX2xhcmdlaW50CAAJ/////wIACgECAAsAAAgAAQAAAAkIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAABwAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAHY19mbG9hdAgACf////8CAAoBAgALAAAIAAEAAAAKCAACAAAAAAwAAw8AAQwAAAABCAABAAAAAAwAAggAAQAAAAgAAAAIAAT/////CAAF/////wgABv////8IAAcAAAABCwAIAAAACGNfZG91YmxlCAAJ/////wIACgECAAsAAAgAAQAAAAsIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAACQAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAGY19kYXRlCAAJ/////wIACgECAAsAAAgAAQAAAAwIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAACgAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAKY19kYXRldGltZQgACf////8CAAoBAgALAAAIAAEAAAANCAACAAAAAAwAAw8AAQwAAAABCAABAAAAAAwAAggAAQAAABUIAAMAAAAJCAAEAAAAAgAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAALY19kZWNpbWFsMzIIAAn/////AgAKAQIACwAACAABAAAADggAAgAAAAAMAAMPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAAWCAADAAAAEggABAAAAAMAAAAIAAT/////CAAF/////wgABv////8IAAcAAAABCwAIAAAAC2NfZGVjaW1hbDY0CAAJ/////wIACgECAAsAAAgAAQAAAA8IAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAAFwgAAwAAACYIAAQAAAAEAAAACAAE/////wgABf////8IAAb/////CAAHAAAAAQsACAAAAAxjX2RlY2ltYWwxMjgIAAn/////AgAKAQIACwAACAABAAAAEAgAAgAAAAAMAAMPAAEMAAAAAQgAAQAAAAAMAAIIAAEAAAANCAACAAAAgAAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAGY19jaGFyCAAJ/////wIACgECAAsAAAgAAQAAABEIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAADwgAAgAAAgAAAAAIAAT/////CAAF/////wgABv////8IAAcAAAABCwAIAAAACWNfdmFyY2hhcggACf////8CAAoBAgALAAAPAAIMAAAAAQgAAQAAAAAIAAL/////CAAD/////woABAAAAAAAACshCAAF/////wAPAAMMAAAAAQoAAQAAAAAAACshCAACAAAAAQgAAwAAABEIAAQAAAAACwAHAAAAKXRiX2FsbF9wcmltaXRpdmV0eXBlX3JlYWRfdHdvX2tleV9wcmltYXJ5CwAIAAAAAAwACwsAAQAAACl0Yl9hbGxfcHJpbWl0aXZldHlwZV9yZWFkX3R3b19rZXlfcHJpbWFyeQAAAAwABAoAAU3gu903SU9XCgACvXlkQdcwSLMAAA==")
                 );
     }
+
     @ParameterizedTest
     @MethodSource
-    public void testReadWithFilter(String tableName, long version, long expectedTotalRows, String queryPlan) {
-        Map<String, String> envs = new HashMap<>();
-        envs.put("db", "demo");
-        envs.put("table", tableName);
-
-        // get schema and shard info
-        com.starrocks.format.rest.models.Schema srSchema = RestService.getShardInfo(envs);
-        TabletSchema.TabletSchemaPB pbSchema = srSchema.getEtlTable().convert();
+    public void testReadWithFilter(String tableName, long version, long expectedTotalRows, String queryPlan) throws Exception {
+        TabletSchemaPB tabletSchema = toPbTabletSchema(restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName));
+        List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
+        assertFalse(partitions.isEmpty());
 
         // read chunk
         long totalRows = 0;
-        for(EtlJobConfig.EtlPartition partition: srSchema.getEtlTable().getPartitionInfo().getPartitions()) {
-            for (int i = 0; i < partition.getTabletIds().size(); i++) {
-                long tabletId = partition.getTabletIds().get(i);
-
-                Map<String, String> options = new HashMap<>();
-                options.put("fs.s3a.endpoint", "http://127.0.0.1:9000");
-                options.put("fs.s3a.endpoint.region", "cn-beijing");
-                options.put("fs.s3a.connection.ssl.enabled", "false");
-                options.put("fs.s3a.path.style.access", "false");
-                options.put("fs.s3a.access.key", "minio_access_key");
-                options.put("fs.s3a.secret.key", "minio_secret_key");
-                options.put("starrocks.format.query_plan", queryPlan);
-                // read table
-                StarrocksReader reader = new StarrocksReader(tabletId, version, pbSchema, partition.getStoragePath(), options);
-                reader.open();
+        for (TablePartition partition : partitions) {
+            for (TablePartition.Tablet tablet : partition.getTablets()) {
+                Long tabletId = tablet.getId();
 
                 try {
-                    int numRows = 0;
+                    Map<String, String> options = settings.toMap();
+                    options.put(STARROCKS_FORMAT_QUERY_PLAN, queryPlan);
+                    // read table
+                    StarRocksReader reader = new StarRocksReader(
+                            tabletId, version, tabletSchema, partition.getStoragePath(), options);
+                    reader.open();
+
+                    long numRows;
                     do {
                         Chunk chunk = reader.getNext();
-                        numRows = (int) chunk.numRow();
-//                        System.out.println(" num rows is " + numRows);
+                        numRows = chunk.numRow();
 
-                        checkValue(pbSchema, chunk, numRows);
+                        checkValue(tabletSchema, chunk, numRows);
                         chunk.release();
 
                         totalRows += numRows;
-                    } while(numRows > 0);
+                    } while (numRows > 0);
 
                     // should be empty chunk
                     Chunk chunk = reader.getNext();
-                    Assert.assertEquals("row number should be 0", 0, chunk.numRow());
+                    assertEquals(0, chunk.numRow());
                     chunk.release();
 
                     reader.close();
                     reader.release();
                 } catch (Exception e) {
-                    System.out.println(e);
-                    Assert.assertFalse("should not be here.", true);
+                    e.printStackTrace();
+                    fail();
                 }
-
 
             }
         }
-        Assert.assertEquals("row number should be " + expectedTotalRows, expectedTotalRows, totalRows);
+
+        assertEquals(expectedTotalRows, totalRows);
     }
 
     @Test
-    public void testExceptionWithFilter() {
-        Map<String, String> envs = new HashMap<>();
-        envs.put("db", "demo");
-        envs.put("table", "tb_all_primitivetype_read_unique");
+    public void testExceptionWithFilter() throws Exception {
         long version = 3;
+        String tableName = "tb_all_primitivetype_read_unique";
 
-        // get schema and shard info
-        com.starrocks.format.rest.models.Schema srSchema = RestService.getShardInfo(envs);
-        TabletSchema.TabletSchemaPB pbSchema = srSchema.getEtlTable().convert();
+        TabletSchemaPB tabletSchema = toPbTabletSchema(restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName));
+        List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
+        assertFalse(partitions.isEmpty());
 
         // read chunk
-        for(EtlJobConfig.EtlPartition partition: srSchema.getEtlTable().getPartitionInfo().getPartitions()) {
-            for (int i = 0; i < partition.getTabletIds().size(); i++) {
-                long tabletId = partition.getTabletIds().get(i);
+        for (TablePartition partition : partitions) {
+            for (TablePartition.Tablet tablet : partition.getTablets()) {
+                Long tabletId = tablet.getId();
 
-                Map<String, String> options = new HashMap<>();
-                options.put("fs.s3a.endpoint", "http://127.0.0.1:9000");
-                options.put("fs.s3a.endpoint.region", "cn-beijing");
-                options.put("fs.s3a.connection.ssl.enabled", "false");
-                options.put("fs.s3a.path.style.access", "false");
-                options.put("fs.s3a.access.key", "minio_access_key");
-                options.put("fs.s3a.secret.key", "minio_secret_key");
+                Map<String, String> options = settings.toMap();
                 // select c_tinyint from table where rowId > 1
-                options.put("starrocks.format.query_plan", "DAABDAACDwABDAAAAAIIAAEAAAABCAACAAAAHAgAAwAAAAEKAAT//////////w8ABQgAAAABAAAAAQ8ABgIAAAABAAIACAACADMBDAA1DQABCAwAAAABAAAAAw8AAQwAAAABCAABAAAAEAwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAAAMAAAAIAAQAAAAADAAPCAABAAAAAwgAAgAAAAAACAAU/////wgAF/////8CADMAAgA0AQIANgEAAAAOADkIAAAAAAIAOwAACAABAAAAAAgAAgAAACAIAAMAAAAACgAE//////////8PAAUIAAAAAQAAAAAPAAYCAAAAAQAPAAcMAAAAAQ8AAQwAAAADCAABAAAAAgwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAAAIAAAAIAAMAAAANCAAEAAAAAggAFP////8IABkAAAAACAAcAAAABQIAMwECADQBAgA2AQAIAAEAAAAQDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAABQAAAAgABAAAAAAMAA8IAAEAAAABCAACAAAAAAAIABT/////CAAX/////wIAMwACADQBAgA2AQAIAAEAAAAJDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAABQAAAAgABAAAAAAMAAoKAAEAAAAAAAAAAQAIABT/////AgAzAAIANAACADYBAAACAAgAAgAzAQ4AOQgAAAAAAgA7AAwAPwgAAQAAAAAPAAILAAAAAQAAAAVyb3dJZA8AAwgAAAABAAAABQIABAALAAYAAAAgdGJfYWxsX3ByaW1pdGl2ZXR5cGVfcmVhZF91bmlxdWULAAcAAAAMMTogcm93SWQgPiAxAgAIAQ0ACQgIAAAAAA8ACgsAAAAADwALCwAAAAEAAAAFcm93SWQAAAAPAAQMAAAAAQ8AAQwAAAABCAABAAAAEAwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAAAMAAAAIAAQAAAAADAAPCAABAAAAAwgAAgAAAAEACAAU/////wgAF/////8CADMAAgA0AQIANgEAAAwABQgAAQAAAAYMAAgAAAwABggAAQAAAAEPAAIMAAAAAAAADQACCgwAAAADAAAAAAAAJ4EKAAEAAAAAAAAngQoAAgAAAAAAAAADCgADAAAAAAAAAAAIAAQVj2d0AAAAAAAAACeCCgABAAAAAAAAJ4IKAAIAAAAAAAAAAwoAAwAAAAAAAAAACAAEFY9ndAAAAAAAAAAngwoAAQAAAAAAACeDCgACAAAAAAAAAAMKAAMAAAAAAAAAAAgABBWPZ3QADAADDwABDAAAAAMIAAEAAAABCAACAAAAAAwAAw8AAQwAAAABCAABAAAAAAwAAggAAQAAAAUAAAAIAAT/////CAAF/////wgABv////8IAAcAAAABCwAIAAAABXJvd0lkCAAJ/////wIACgECAAsAAAgAAQAAAAMIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAAAwAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAJY190aW55aW50CAAJ/////wIACgECAAsAAAgAAQAAAAMIAAIAAAABDAADDwABDAAAAAEIAAEAAAAADAACCAABAAAAAwAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAACAAJ/////wIACgECAAsAAA8AAgwAAAACCAABAAAAAAgAAv////8IAAP/////CgAEAAAAAAAAJ38IAAX/////AAgAAQAAAAEIAAL/////CAAD/////wgABf////8ADwADDAAAAAEKAAEAAAAAAAAnfwgAAgAAAAEIAAMAAAAQCAAEAAAAAAsABwAAACB0Yl9hbGxfcHJpbWl0aXZldHlwZV9yZWFkX3VuaXF1ZQsACAAAAAAMAAsLAAEAAAAgdGJfYWxsX3ByaW1pdGl2ZXR5cGVfcmVhZF91bmlxdWUAAAAMAAQKAAE1nvOblRtOsgoAArkhOKh0CF2IAAA=");
+                options.put(STARROCKS_FORMAT_QUERY_PLAN,
+                        "DAABDAACDwABDAAAAAIIAAEAAAABCAACAAAAHAgAAwAAAAEKAAT//////////w8ABQgAAAABAAAAAQ8ABgIAAAABAAIACAACADMBDAA1DQABCAwAAAABAAAAAw8AAQwAAAABCAABAAAAEAwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAAAMAAAAIAAQAAAAADAAPCAABAAAAAwgAAgAAAAAACAAU/////wgAF/////8CADMAAgA0AQIANgEAAAAOADkIAAAAAAIAOwAACAABAAAAAAgAAgAAACAIAAMAAAAACgAE//////////8PAAUIAAAAAQAAAAAPAAYCAAAAAQAPAAcMAAAAAQ8AAQwAAAADCAABAAAAAgwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAAAIAAAAIAAMAAAANCAAEAAAAAggAFP////8IABkAAAAACAAcAAAABQIAMwECADQBAgA2AQAIAAEAAAAQDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAABQAAAAgABAAAAAAMAA8IAAEAAAABCAACAAAAAAAIABT/////CAAX/////wIAMwACADQBAgA2AQAIAAEAAAAJDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAABQAAAAgABAAAAAAMAAoKAAEAAAAAAAAAAQAIABT/////AgAzAAIANAACADYBAAACAAgAAgAzAQ4AOQgAAAAAAgA7AAwAPwgAAQAAAAAPAAILAAAAAQAAAAVyb3dJZA8AAwgAAAABAAAABQIABAALAAYAAAAgdGJfYWxsX3ByaW1pdGl2ZXR5cGVfcmVhZF91bmlxdWULAAcAAAAMMTogcm93SWQgPiAxAgAIAQ0ACQgIAAAAAA8ACgsAAAAADwALCwAAAAEAAAAFcm93SWQAAAAPAAQMAAAAAQ8AAQwAAAABCAABAAAAEAwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAAAMAAAAIAAQAAAAADAAPCAABAAAAAwgAAgAAAAEACAAU/////wgAF/////8CADMAAgA0AQIANgEAAAwABQgAAQAAAAYMAAgAAAwABggAAQAAAAEPAAIMAAAAAAAADQACCgwAAAADAAAAAAAAJ4EKAAEAAAAAAAAngQoAAgAAAAAAAAADCgADAAAAAAAAAAAIAAQVj2d0AAAAAAAAACeCCgABAAAAAAAAJ4IKAAIAAAAAAAAAAwoAAwAAAAAAAAAACAAEFY9ndAAAAAAAAAAngwoAAQAAAAAAACeDCgACAAAAAAAAAAMKAAMAAAAAAAAAAAgABBWPZ3QADAADDwABDAAAAAMIAAEAAAABCAACAAAAAAwAAw8AAQwAAAABCAABAAAAAAwAAggAAQAAAAUAAAAIAAT/////CAAF/////wgABv////8IAAcAAAABCwAIAAAABXJvd0lkCAAJ/////wIACgECAAsAAAgAAQAAAAMIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAAAwAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAJY190aW55aW50CAAJ/////wIACgECAAsAAAgAAQAAAAMIAAIAAAABDAADDwABDAAAAAEIAAEAAAAADAACCAABAAAAAwAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAACAAJ/////wIACgECAAsAAA8AAgwAAAACCAABAAAAAAgAAv////8IAAP/////CgAEAAAAAAAAJ38IAAX/////AAgAAQAAAAEIAAL/////CAAD/////wgABf////8ADwADDAAAAAEKAAEAAAAAAAAnfwgAAgAAAAEIAAMAAAAQCAAEAAAAAAsABwAAACB0Yl9hbGxfcHJpbWl0aXZldHlwZV9yZWFkX3VuaXF1ZQsACAAAAAAMAAsLAAEAAAAgdGJfYWxsX3ByaW1pdGl2ZXR5cGVfcmVhZF91bmlxdWUAAAAMAAQKAAE1nvOblRtOsgoAArkhOKh0CF2IAAA=");
                 // read table
-                StarrocksReader reader = new StarrocksReader(tabletId, version, pbSchema, partition.getStoragePath(), options);
+                StarRocksReader reader =
+                        new StarRocksReader(tabletId, version, tabletSchema, partition.getStoragePath(), options);
                 try {
                     reader.open();
-                    Assert.assertFalse("should not be here.", true);
+                    fail();
                 } catch (Exception e) {
-                    Assert.assertTrue(e.getMessage(), e.getMessage().contains("is not same as column size in tablet reader"));
+                    assertTrue(e.getMessage().contains("is not same as column size in tablet reader"));
                 }
                 reader.close();
                 reader.release();
             }
         }
+
     }
 
     @Test
-    public void testExceptionWithWrongPlan() {
-        Map<String, String> envs = new HashMap<>();
-        envs.put("db", "demo");
-        envs.put("table", "tb_all_primitivetype_read_unique");
+    public void testExceptionWithWrongPlan() throws Exception {
         long version = 3;
+        String tableName = "tb_all_primitivetype_read_unique";
 
-        // get schema and shard info
-        com.starrocks.format.rest.models.Schema srSchema = RestService.getShardInfo(envs);
-        TabletSchema.TabletSchemaPB pbSchema = srSchema.getEtlTable().convert();
+        TabletSchemaPB tabletSchema = toPbTabletSchema(restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName));
+        List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
+        assertFalse(partitions.isEmpty());
 
         // read chunk
-        for(EtlJobConfig.EtlPartition partition: srSchema.getEtlTable().getPartitionInfo().getPartitions()) {
-            for (int i = 0; i < partition.getTabletIds().size(); i++) {
-                long tabletId = partition.getTabletIds().get(i);
+        for (TablePartition partition : partitions) {
+            for (TablePartition.Tablet tablet : partition.getTablets()) {
+                Long tabletId = tablet.getId();
 
-                Map<String, String> options = new HashMap<>();
-                options.put("fs.s3a.endpoint", "http://127.0.0.1:9000");
-                options.put("fs.s3a.endpoint.region", "cn-beijing");
-                options.put("fs.s3a.connection.ssl.enabled", "false");
-                options.put("fs.s3a.path.style.access", "false");
-                options.put("fs.s3a.access.key", "minio_access_key");
-                options.put("fs.s3a.secret.key", "minio_secret_key");
+                Map<String, String> options = settings.toMap();
                 // select c_tinyint from table where rowId > 1
-                options.put("starrocks.format.query_plan", "IAAA=");
+                options.put(STARROCKS_FORMAT_QUERY_PLAN, "IAAA=");
                 // read table
-                StarrocksReader reader = new StarrocksReader(tabletId, version, pbSchema, partition.getStoragePath(), options);
+                StarRocksReader reader = new StarRocksReader(
+                        tabletId, version, tabletSchema, partition.getStoragePath(), options);
                 try {
                     reader.open();
-                    Assert.assertFalse("should not be here.", true);
+                    fail();
                 } catch (Exception e) {
-                    Assert.assertTrue(e.getMessage(), e.getMessage().contains("couldn't deserialize thrift msg"));
+                    assertTrue(e.getMessage().contains("couldn't deserialize thrift msg"));
                 }
                 reader.close();
                 reader.release();
             }
         }
+
     }
 
-
-    static Stream<Arguments> testReadColumnPrunning() {
+    private static Stream<Arguments> testReadColumnPruning() {
         return Stream.of(
                 Arguments.of("tb_all_primitivetype_read_duplicate", 3, 5, true),
                 Arguments.of("tb_all_primitivetype_read_unique", 3, 5, true),
@@ -305,144 +277,262 @@ public class StarrocksReaderTest {
 
         );
     }
+
     @ParameterizedTest
     @MethodSource
-    public void testReadColumnPrunning(String tableName, long version, long expectedTotalRows, boolean withKey) {
-        Map<String, String> envs = new HashMap<>();
-        envs.put("db", "demo");
-        envs.put("table", tableName);
+    public void testReadColumnPruning(
+            String tableName, long version, long expectedTotalRows, boolean withKey) throws Exception {
 
-        // get schema and shard info
-        com.starrocks.format.rest.models.Schema srSchema = RestService.getShardInfo(envs);
-        TabletSchema.TabletSchemaPB tabletSchemaPB = srSchema.getEtlTable().convert();
-        TabletSchema.TabletSchemaPB.Builder builder = tabletSchemaPB.toBuilder()
-                .clearColumn();
+        TabletSchemaPB tabletSchema = toPbTabletSchema(restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName));
+        List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
+        assertFalse(partitions.isEmpty());
 
-        // 生成随机列
-        Random random = new Random();
+        TabletSchemaPB.Builder builder = tabletSchema.toBuilder().clearColumn();
 
         if (withKey) {
             // add the key column;
-            builder.addAllColumn(tabletSchemaPB.getColumnList().stream()
-                    .filter(columnPB -> columnPB.getIsKey())
+            builder.addAllColumn(tabletSchema.getColumnList().stream()
+                    .filter(ColumnPB::getIsKey)
                     .collect(Collectors.toList()));
         }
-        List<TabletSchema.ColumnPB> columnList =  tabletSchemaPB.getColumnList().stream()
-                .filter(columnPB -> !columnPB.getIsKey())
+
+        List<TabletSchema.ColumnPB> pbColumns = tabletSchema.getColumnList().stream()
+                .filter(col -> !col.getIsKey())
                 .collect(Collectors.toList());
-        Collections.shuffle(columnList);
-        List<TabletSchema.ColumnPB> readColumns = columnList
-                .subList(0, Math.max(1, random.nextInt(tabletSchemaPB.getColumnCount())));
+        Collections.shuffle(pbColumns);
+        List<TabletSchema.ColumnPB> readColumns = pbColumns
+                .subList(0, Math.max(1, RandomUtils.nextInt(0, tabletSchema.getColumnCount())));
         builder.addAllColumn(readColumns);
-        TabletSchema.TabletSchemaPB pbSchema = builder.build();
-        for (TabletSchema.ColumnPB columnPB :  pbSchema.getColumnList()) {
-            System.out.println("Read column(" + columnPB.getUniqueId() + "): "
-                    + columnPB.getName());
+        TabletSchemaPB pbSchema = builder.build();
+        for (ColumnPB pbColumn : pbSchema.getColumnList()) {
+            System.out.println("Read column(" + pbColumn.getUniqueId() + "): " + pbColumn.getName());
         }
 
         // read chunk
         long totalRows = 0;
-        for(EtlJobConfig.EtlPartition partition: srSchema.getEtlTable().getPartitionInfo().getPartitions()) {
-            for (int i = 0; i < partition.getTabletIds().size(); i++) {
-                long tabletId = partition.getTabletIds().get(i);
-
-                Map<String, String> options = new HashMap<>();
-                options.put("fs.s3a.endpoint", "http://127.0.0.1:9000");
-                options.put("fs.s3a.endpoint.region", "cn-beijing");
-                options.put("fs.s3a.connection.ssl.enabled", "false");
-                options.put("fs.s3a.path.style.access", "false");
-                options.put("fs.s3a.access.key", "minio_access_key");
-                options.put("fs.s3a.secret.key", "minio_secret_key");
-                options.put("starrocks.format.using_column_uid", "true");
-
-                StarrocksReader reader = new StarrocksReader(tabletId, version, pbSchema, partition.getStoragePath(), options);
-                reader.open();
+        for (TablePartition partition : partitions) {
+            for (TablePartition.Tablet tablet : partition.getTablets()) {
+                Long tabletId = tablet.getId();
 
                 try {
-                    int numRows = 0;
+                    Map<String, String> options = settings.toMap();
+                    options.put(STARROCKS_FORMAT_USING_COLUMN_UID, "true");
+
+                    StarRocksReader reader =
+                            new StarRocksReader(tabletId, version, pbSchema, partition.getStoragePath(), options);
+                    reader.open();
+
+                    long numRows;
                     do {
                         Chunk chunk = reader.getNext();
-                        numRows = (int) chunk.numRow();
+                        numRows = chunk.numRow();
                         if (withKey) {
                             checkValue(pbSchema, chunk, numRows);
                         }
                         chunk.release();
 
                         totalRows += numRows;
-                    } while(numRows > 0);
+                    } while (numRows > 0);
 
                     // should be empty chunk
                     Chunk chunk = reader.getNext();
-                    Assert.assertEquals("row number should be 0", 0, chunk.numRow());
+                    assertEquals(0, chunk.numRow());
                     chunk.release();
 
                     reader.close();
                     reader.release();
                 } catch (Exception e) {
-                    System.out.println(e);
-                    Assert.assertFalse("should not be here.", true);
+                    e.printStackTrace();
+                    fail();
                 }
             }
         }
-        Assert.assertEquals("row number should be " + expectedTotalRows, expectedTotalRows, totalRows);
+
+        assertEquals(expectedTotalRows, totalRows);
     }
 
-    private void checkValue(TabletSchema.TabletSchemaPB schema, Chunk chunk, int num_rows) {
-        for (int rowIdx = 0; rowIdx < num_rows; rowIdx++) {
+    @Test
+    public void testUnsupportedColumnType(@TempDir Path tempDir) throws Exception {
+        TabletSchemaPB.Builder tabletSchemaBuilder = TabletSchemaPB.newBuilder()
+                .setId(1)
+                .setKeysType(TabletSchema.KeysType.DUP_KEYS)
+                .setCompressionType(CompressionTypePB.LZ4_FRAME);
+
+        ColumnType[] columnTypes = new ColumnType[] {
+                new ColumnType(DataType.BOOLEAN, 4),
+                new ColumnType(DataType.INT, 4),
+                new ColumnType(DataType.TINYINT, 1),
+                new ColumnType(DataType.SMALLINT, 2),
+                new ColumnType(DataType.BIGINT, 8),
+                new ColumnType(DataType.LARGEINT, 16),
+                new ColumnType(DataType.FLOAT, 4),
+                new ColumnType(DataType.DOUBLE, 8),
+                new ColumnType(DataType.DATE, 4),
+                new ColumnType(DataType.DATETIME, 8),
+                new ColumnType(DataType.DECIMAL32, 8),
+                new ColumnType(DataType.DECIMAL64, 16),
+                new ColumnType(DataType.VARCHAR, 32 + Integer.SIZE),
+                new ColumnType(DataType.MAP, 16),
+                new ColumnType(DataType.ARRAY, 16),
+                new ColumnType(DataType.STRUCT, 16),
+                new ColumnType(DataType.JSON, 16)
+        };
+
+        int colId = 0;
+        for (ColumnType columnType : columnTypes) {
+            ColumnPB.Builder columnBuilder = ColumnPB.newBuilder()
+                    .setName("c_" + columnType.getDataType())
+                    .setUniqueId(colId).setIsKey(true)
+                    .setIsNullable(false)
+                    .setType(columnType.getDataType().getLiteral())
+                    .setLength(columnType.getLength())
+                    .setIndexLength(columnType.getLength())
+                    .setAggregation("none");
+            if (columnType.getDataType().getLiteral().startsWith("DECIMAL32")) {
+                columnBuilder.setPrecision(9);
+                columnBuilder.setFrac(3);
+            } else if (columnType.getDataType().getLiteral().startsWith("DECIMAL64")) {
+                columnBuilder.setPrecision(18);
+                columnBuilder.setFrac(4);
+            } else if (columnType.getDataType().getLiteral().startsWith("DECIMAL128")) {
+                columnBuilder.setPrecision(29);
+                columnBuilder.setFrac(5);
+            }
+            tabletSchemaBuilder.addColumn(columnBuilder.build());
+            colId++;
+        }
+        TabletSchemaPB tabletSchema = tabletSchemaBuilder.setNextColumnUniqueId(colId)
+                // sort key index alway the key column index
+                .addSortKeyIdxes(0)
+                // short key size is less than sort keys
+                .setNumShortKeyColumns(1).setNumRowsPerRowBlock(1024).build();
+
+        long tabletId = 100;
+        Map<String, String> options = new HashMap<>();
+
+        String tabletRootPath = tempDir.toAbsolutePath().toString();
+        File dir = new File(tabletRootPath + "/data");
+        assertTrue(dir.mkdirs());
+        dir = new File(tabletRootPath + "/log");
+        assertTrue(dir.mkdirs());
+
+        try {
+            StarRocksReader reader = new StarRocksReader(tabletId, 1, tabletSchema, tabletRootPath, options);
+            reader.open();
+            fail();
+        } catch (Exception e) {
+            e.printStackTrace();
+            assertTrue(e.getMessage().contains("Unsupported column type"));
+        }
+    }
+
+    @Test
+    public void testReadException() throws Exception {
+        long version = 3;
+        String tableName = "tb_all_primitivetype_read_duplicate";
+
+        TabletSchemaPB tabletSchema = toPbTabletSchema(restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName));
+        List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
+        assertFalse(partitions.isEmpty());
+
+        // read chunk
+
+        for (TablePartition partition : partitions) {
+            for (TablePartition.Tablet tablet : partition.getTablets()) {
+                Long tabletId = tablet.getId();
+
+                try {
+                    StarRocksReader reader =
+                            new StarRocksReader(tabletId, version, tabletSchema, partition.getStoragePath(), settings.toMap());
+                    reader.open();
+
+                    Chunk chunk = reader.getNext();
+                    // long numRows =  chunk.numRow();
+
+                    Column column = chunk.getColumn(0);
+                    try {
+                        column.getDecimal(0);
+                        fail();
+                    } catch (Exception e) {
+                        assertTrue(e.getMessage().contains("Unsupported type"));
+                    }
+
+                    chunk.release();
+
+                    reader.close();
+                    reader.release();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    fail();
+                }
+            }
+        }
+    }
+
+    private static void checkValue(TabletSchemaPB schema, Chunk chunk, long numRows) {
+        for (int rowIdx = 0; rowIdx < numRows; rowIdx++) {
             int rowId = 0;
             for (int colIdx = 0; colIdx < schema.getColumnCount(); colIdx++) {
-                TabletSchema.ColumnPB columnPB = schema.getColumn(colIdx);
+                ColumnPB pbColumn = schema.getColumn(colIdx);
                 Column column = chunk.getColumn(colIdx);
-                if (columnPB.getName().equalsIgnoreCase("rowid")) {
+                if ("rowid".equalsIgnoreCase(pbColumn.getName())) {
                     rowId = column.getInt(rowIdx);
                     break;
                 }
             }
 
             for (int colIdx = 0; colIdx < schema.getColumnCount(); colIdx++) {
-                TabletSchema.ColumnPB columnPB = schema.getColumn(colIdx);
+                ColumnPB pbColumn = schema.getColumn(colIdx);
                 Column column = chunk.getColumn(colIdx);
-                if (columnPB.getName().equalsIgnoreCase("rowid")) {
-                    Assert.assertEquals(rowId, column.getInt(rowIdx));
+                if ("rowid".equalsIgnoreCase(pbColumn.getName())) {
+                    assertEquals(rowId, column.getInt(rowIdx));
                     continue;
                 }
-                if (columnPB.getName().equalsIgnoreCase("rowid2")) {
-                    Assert.assertEquals(rowId, column.getInt(rowIdx));
+                if ("rowid2".equalsIgnoreCase(pbColumn.getName())) {
+                    assertEquals(rowId, column.getInt(rowIdx));
                     continue;
                 }
                 if (rowId == 2) {
-                    Assert.assertTrue("column "+columnPB.getName() + " row:" + rowId + " should be null." , column.isNullAt(rowIdx));
+                    assertTrue(
+                            column.isNullAt(rowIdx),
+                            "column " + pbColumn.getName() + " row:" + rowId + " should be null."
+                    );
                     continue;
                 }
-                Assert.assertFalse("column "+columnPB.getName() + " row:" + rowId + " should not be null." , column.isNullAt(rowIdx));
+                assertFalse(
+                        column.isNullAt(rowIdx),
+                        "column " + pbColumn.getName() + " row:" + rowId + " should not be null."
+                );
                 int sign = (rowId % 2 == 0) ? -1 : 1;
-                switch (columnPB.getType()) {
-                    case "BOOLEAN":
+
+                DataType dataType = DataType.fromLiteral(pbColumn.getType()).get();
+                switch (dataType) {
+                    case BOOLEAN:
                         if (rowId % 2 == 0) {
-                            Assert.assertEquals(true, column.getBoolean(rowIdx));
+                            assertTrue(column.getBoolean(rowIdx));
                         } else {
-                            Assert.assertEquals(false, column.getBoolean(rowIdx));
+                            assertFalse(column.getBoolean(rowIdx));
                         }
                         break;
-                    case "TINYINT":
+                    case TINYINT:
                         if (rowId == 0) {
-                            Assert.assertEquals(Byte.MAX_VALUE, column.getByte(rowIdx));
+                            assertEquals(Byte.MAX_VALUE, column.getByte(rowIdx));
                         } else if (rowId == 1) {
-                            Assert.assertEquals(Byte.MIN_VALUE, column.getByte(rowIdx));
+                            assertEquals(Byte.MIN_VALUE, column.getByte(rowIdx));
                         } else {
-                            Assert.assertEquals(rowId * sign, column.getByte(rowIdx));
+                            assertEquals(rowId * sign, column.getByte(rowIdx));
                         }
                         break;
-                    case "SMALLINT":
+                    case SMALLINT:
                         if (rowId == 0) {
-                            Assert.assertEquals(Short.MAX_VALUE, column.getShort(rowIdx));
+                            assertEquals(Short.MAX_VALUE, column.getShort(rowIdx));
                         } else if (rowId == 1) {
-                            Assert.assertEquals(Short.MIN_VALUE, column.getShort(rowIdx));
+                            assertEquals(Short.MIN_VALUE, column.getShort(rowIdx));
                         } else {
-                            Assert.assertEquals(rowId * 10 * sign, column.getShort(rowIdx));
+                            assertEquals(rowId * 10 * sign, column.getShort(rowIdx));
                         }
                         break;
-                    case "INT":
+                    case INT:
                         int intValue;
                         if (rowId == 0) {
                             intValue = Integer.MAX_VALUE;
@@ -451,9 +541,9 @@ public class StarrocksReaderTest {
                         } else {
                             intValue = rowId * 100 * sign;
                         }
-                        Assert.assertEquals(intValue, column.getInt(rowIdx));
+                        assertEquals(intValue, column.getInt(rowIdx));
                         break;
-                    case "BIGINT":
+                    case BIGINT:
                         long longValue;
                         if (rowId == 0) {
                             longValue = Long.MAX_VALUE;
@@ -462,9 +552,9 @@ public class StarrocksReaderTest {
                         } else {
                             longValue = rowId * 1000L * sign;
                         }
-                        Assert.assertEquals(longValue, column.getLong(rowIdx));
+                        assertEquals(longValue, column.getLong(rowIdx));
                         break;
-                    case "LARGEINT":
+                    case LARGEINT:
                         BigInteger biv;
                         if (rowId == 0) {
                             biv = new BigInteger("6693349846790746512344567890123456789");
@@ -473,39 +563,15 @@ public class StarrocksReaderTest {
                         } else {
                             biv = BigInteger.valueOf(rowId * 10000L * sign);
                         }
-                        Assert.assertEquals(biv, column.getLargeInt(rowIdx));
+                        assertEquals(biv, column.getLargeInt(rowIdx));
                         break;
-                    case "FLOAT":
-                        Assert.assertTrue("Column value " + column.getFloat(rowIdx), Math.abs(123.45678901234f * rowId * sign - column.getFloat(rowIdx)) < 0.0001);
+                    case FLOAT:
+                        assertTrue(Math.abs(123.45678901234f * rowId * sign - column.getFloat(rowIdx)) < 0.0001);
                         break;
-                    case "DOUBLE":
-                        Assert.assertTrue(Math.abs(23456.78901234 * rowId * sign - column.getDouble(rowIdx)) < 0.0001);
+                    case DOUBLE:
+                        assertTrue(Math.abs(23456.78901234 * rowId * sign - column.getDouble(rowIdx)) < 0.0001);
                         break;
-                    case "DATE":
-                        Date dt;
-                        if (rowId == 0) {
-                            dt = Date.valueOf("1900-1-1");
-                        } else if (rowId == 1) {
-                            dt = Date.valueOf("4096-12-31");
-                        } else {
-                            dt = Date.valueOf("2023-10-31");
-                            dt.setYear(123 + rowId * sign);
-                        }
-                        Assert.assertEquals("Column " + columnPB.getName() + " not same.", dt, column.getDate(rowIdx, TimeZone.getDefault()));
-                        break;
-                    case "DATETIME":
-                        Timestamp ts;
-                        if (rowId == 0) {
-                            ts = Timestamp.valueOf("1800-11-20 12:40:39");
-                        } else if (rowId == 1) {
-                            ts = Timestamp.valueOf("4096-11-30 11:22:33");
-                        } else {
-                            ts = Timestamp.valueOf("2023-12-30 22:33:44");
-                            ts.setYear(123 + rowId * sign);
-                        }
-                        Assert.assertEquals("Column " + columnPB.getName() + " not same.", ts, column.getTimestamp(rowIdx, TimeZone.getDefault()));
-                        break;
-                    case "DECIMAL":
+                    case DECIMAL:
                         // decimal v2 type
                         BigDecimal bdv2;
                         if (rowId == 0) {
@@ -516,147 +582,73 @@ public class StarrocksReaderTest {
                             bdv2 = new BigDecimal("1234.56789");
                             bdv2 = bdv2.multiply(BigDecimal.valueOf(sign));
                         }
-                        Assert.assertEquals("Column " + columnPB.getName() + " not same.", bdv2, column.getDecimal(rowIdx));
+                        assertEquals(bdv2, column.getDecimal(rowIdx));
                         break;
-                    case "DECIMAL32":
-                    case "DECIMAL64":
-                    case "DECIMAL128":
+                    case DECIMAL32:
+                    case DECIMAL64:
+                    case DECIMAL128:
                         BigDecimal bd;
                         if (rowId == 0) {
-                            if (columnPB.getPrecision() <= 9) {
+                            if (pbColumn.getPrecision() <= 9) {
                                 bd = new BigDecimal("9999999.57");
-                            } else if (columnPB.getPrecision() <= 18) {
+                            } else if (pbColumn.getPrecision() <= 18) {
                                 bd = new BigDecimal("999999999999999.568");
                             } else {
                                 bd = new BigDecimal("9999999999999999999999999999999999.5679");
                             }
                         } else if (rowId == 1) {
-                            if (columnPB.getPrecision() <= 9) {
+                            if (pbColumn.getPrecision() <= 9) {
                                 bd = new BigDecimal("-9999999.57");
-                            } else if (columnPB.getPrecision() <= 18) {
+                            } else if (pbColumn.getPrecision() <= 18) {
                                 bd = new BigDecimal("-999999999999999.568");
                             } else {
                                 bd = new BigDecimal("-9999999999999999999999999999999999.5679");
                             }
                         } else {
-                            if (columnPB.getPrecision() <= 9) {
+                            if (pbColumn.getPrecision() <= 9) {
                                 bd = new BigDecimal("12345.5678");
-                            } else if (columnPB.getPrecision() <= 18) {
+                            } else if (pbColumn.getPrecision() <= 18) {
                                 bd = new BigDecimal("123456789012.56789");
                             } else {
                                 bd = new BigDecimal("12345678901234567890123.56789");
                             }
-                            bd = bd.multiply(BigDecimal.valueOf(rowId * sign)).setScale(columnPB.getFrac(), RoundingMode.HALF_UP);
+                            bd = bd.multiply(BigDecimal.valueOf(rowId * sign)).setScale(pbColumn.getFrac(), RoundingMode.HALF_UP);
                         }
-                        Assert.assertEquals("Column " + columnPB.getName() + " not same.", bd, column.getDecimal(rowIdx));
+                        assertEquals(bd, column.getDecimal(rowIdx));
                         break;
-                    case "CHAR":
-                    case "VARCHAR":
-                        Assert.assertEquals("Column " + columnPB.getName() + " not same.", columnPB.getName() + ":name" + rowId, column.getString(rowIdx));
+                    case CHAR:
+                    case VARCHAR:
+                        assertEquals(pbColumn.getName() + ":name" + rowId, column.getString(rowIdx));
                         break;
+                    case DATE:
+                        Date dt;
+                        if (rowId == 0) {
+                            dt = Date.valueOf("1900-1-1");
+                        } else if (rowId == 1) {
+                            dt = Date.valueOf("4096-12-31");
+                        } else {
+                            dt = Date.valueOf("2023-10-31");
+                            dt.setYear(123 + rowId * sign);
+                        }
+                        assertEquals(dt, column.getDate(rowIdx, TimeZone.getDefault()));
+                        break;
+                    case DATETIME:
+                        Timestamp ts;
+                        if (rowId == 0) {
+                            ts = Timestamp.valueOf("1800-11-20 12:40:39");
+                        } else if (rowId == 1) {
+                            ts = Timestamp.valueOf("4096-11-30 11:22:33");
+                        } else {
+                            ts = Timestamp.valueOf("2023-12-30 22:33:44");
+                            ts.setYear(123 + rowId * sign);
+                        }
+                        assertEquals(ts, column.getTimestamp(rowIdx, TimeZone.getDefault()));
+                        break;
+                    default:
+                        throw new IllegalStateException("unsupported column type: " + pbColumn.getType());
                 }
             }
         }
-    }
-
-    @Test
-    public void testUnsupportColumnType(@TempDir Path tempDir) {
-        TabletSchema.TabletSchemaPB.Builder schemaBuilder = TabletSchema.TabletSchemaPB.newBuilder().setId(1).setKeysType(TabletSchema.KeysType.DUP_KEYS).setCompressionType(CompressionTypePB.LZ4_FRAME);
-
-        ColumnType[] types = new ColumnType[]{new ColumnType("INT", 4), new ColumnType("BOOLEAN", 4), new ColumnType("TINYINT", 1), new ColumnType("SMALLINT", 2), new ColumnType("BIGINT", 8), new ColumnType("LARGEINT", 16), new ColumnType("FLOAT", 4), new ColumnType("DOUBLE", 8), new ColumnType("DATE", 4), new ColumnType("DATETIME", 8), new ColumnType("DECIMAL32", 8), new ColumnType("DECIMAL64", 16), new ColumnType("VARCHAR", 32 + Integer.SIZE), new ColumnType("MAP", 16), new ColumnType("ARRAY", 16), new ColumnType("STRUCT", 16), new ColumnType("JSON", 16)};
-
-        int colId = 0;
-        for (ColumnType type : types) {
-            TabletSchema.ColumnPB.Builder columnBuilder = TabletSchema.ColumnPB.newBuilder();
-            columnBuilder.setName("c_" + type.typeName).setUniqueId(colId).setIsKey(true).setIsNullable(false).setType(type.typeName).setLength(type.length).setIndexLength(type.length).setAggregation("none");
-            if (type.typeName.startsWith("DECIMAL32")) {
-                columnBuilder.setPrecision(9);
-                columnBuilder.setFrac(3);
-            } else if (type.typeName.startsWith("DECIMAL64")) {
-                columnBuilder.setPrecision(18);
-                columnBuilder.setFrac(4);
-            } else if (type.typeName.startsWith("DECIMAL128")) {
-                columnBuilder.setPrecision(29);
-                columnBuilder.setFrac(5);
-            }
-            schemaBuilder.addColumn(columnBuilder.build());
-            colId++;
-        }
-        TabletSchema.TabletSchemaPB schema = schemaBuilder.setNextColumnUniqueId(colId)
-                // sort key index alway the key column index
-                .addSortKeyIdxes(0)
-                // short key size is less than sort keys
-                .setNumShortKeyColumns(1).setNumRowsPerRowBlock(1024).build();
-
-        long tabletId = 100;
-        Map<String, String> options = new HashMap<String, String>();
-
-        String tabletRootPath = tempDir.toAbsolutePath().toString();
-        File dir = new File(tabletRootPath + "/data");
-        dir.mkdirs();
-        dir = new File(tabletRootPath + "/log");
-        dir.mkdirs();
-
-        try {
-
-            StarrocksReader reader = new StarrocksReader(tabletId, 1, schema, tabletRootPath, options);
-            reader.open();
-            Assert.fail("Should not here");
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Do not support columns type:[MAP, ARRAY, STRUCT, JSON]"));
-        }
-    }
-
-    @Test
-    public void testReadException() {
-        Map<String, String> envs = new HashMap<>();
-        envs.put("db", "demo");
-        envs.put("table", "tb_all_primitivetype_read_duplicate");
-
-        // get schema and shard info
-        com.starrocks.format.rest.models.Schema srSchema = RestService.getShardInfo(envs);
-        TabletSchema.TabletSchemaPB pbSchema = srSchema.getEtlTable().convert();
-        long version = 3;
-
-        // read chunk
-        srSchema.getEtlTable().getPartitionInfo().getPartitions().forEach(partition -> {
-            for (int i = 0; i < partition.getTabletIds().size(); i++) {
-                long tabletId = partition.getTabletIds().get(i);
-
-                Map<String, String> options = new HashMap<>();
-                options.put("fs.s3a.endpoint", "http://127.0.0.1:9000");
-                options.put("fs.s3a.endpoint.region", "cn-beijing");
-                options.put("fs.s3a.connection.ssl.enabled", "false");
-                options.put("fs.s3a.path.style.access", "false");
-                options.put("fs.s3a.access.key", "minio_access_key");
-                options.put("fs.s3a.secret.key", "minio_secret_key");
-
-                StarrocksReader reader = new StarrocksReader(tabletId, version, pbSchema, partition.getStoragePath(), options);
-                reader.open();
-
-                try {
-                    Chunk chunk = reader.getNext();
-                    int numRows = (int) chunk.numRow();
-
-                    Column column = chunk.getColumn(0);
-                    try {
-                        column.getDecimal(0);
-                        Assert.assertFalse("should not be here.", true);
-                    } catch (Exception e) {
-                        Assert.assertTrue(e.getMessage(), e.getMessage().contains("Unsupported type"));
-                    }
-
-                    chunk.release();
-
-                    reader.close();
-                    reader.release();
-                } catch (Exception e) {
-                    System.out.println(e);
-                    Assert.assertFalse("should not be here.", true);
-                }
-
-            }
-        });
     }
 
 }

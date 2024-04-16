@@ -1,0 +1,11 @@
+starrocks.fe.http.url=127.0.0.1:8030
+starrocks.fe.jdbc.url=jdbc:mysql://127.0.0.1:9030
+starrocks.user=root
+starrocks.password=
+
+fs.s3a.endpoint=https://tos-s3-cn-beijing.ivolces.com
+fs.s3a.endpoint.region=cn-beijing
+fs.s3a.connection.ssl.enabled=false
+fs.s3a.path.style.access=false
+fs.s3a.access.key=
+fs.s3a.secret.key=

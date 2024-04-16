@@ -104,7 +104,7 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_JniWrapper_releaseChunk(JNIEnv*
 }
 
 // writer functions
-JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksWriter_createNativeWriter(JNIEnv* env, jobject jobj,
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksWriter_createNativeWriter(JNIEnv* env, jobject jobj,
                                                                                      jlong jtablet_id,
                                                                                      jbyteArray jschema, jlong jtxn_id,
                                                                                      jstring jtable_root_path,
@@ -131,27 +131,27 @@ JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksWriter_createNativeWr
     return reinterpret_cast<int64_t>(format_writer);
 }
 
-JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksWriter_destroyNativeWriter(JNIEnv* env, jobject jobj,
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksWriter_destroyNativeWriter(JNIEnv* env, jobject jobj,
                                                                                       jlong handler) {
     StarrocksFormatWriter* tablet_writer = reinterpret_cast<StarrocksFormatWriter*>(handler);
     SAFE_CALL_WRITER_FUNCATION(tablet_writer, { delete tablet_writer; });
     return 0;
 }
 
-JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksWriter_nativeOpen(JNIEnv* env, jobject jobj, jlong handler) {
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksWriter_nativeOpen(JNIEnv* env, jobject jobj, jlong handler) {
     StarrocksFormatWriter* tablet_writer = reinterpret_cast<StarrocksFormatWriter*>(handler);
     SAFE_CALL_WRITER_FUNCATION(tablet_writer, { tablet_writer->open(); });
     return 0;
 }
 
-JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksWriter_nativeClose(JNIEnv* env, jobject jobj,
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksWriter_nativeClose(JNIEnv* env, jobject jobj,
                                                                               jlong handler) {
     StarrocksFormatWriter* tablet_writer = reinterpret_cast<StarrocksFormatWriter*>(handler);
     SAFE_CALL_WRITER_FUNCATION(tablet_writer, { tablet_writer->close(); });
     return 0;
 }
 
-JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksWriter_nativeWrite(JNIEnv* env, jobject jobj, jlong handler,
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksWriter_nativeWrite(JNIEnv* env, jobject jobj, jlong handler,
                                                                               jlong jchunk_data) {
     StarrocksFormatWriter* tablet_writer = reinterpret_cast<StarrocksFormatWriter*>(handler);
     SAFE_CALL_WRITER_FUNCATION(tablet_writer, {
@@ -171,7 +171,7 @@ JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksWriter_nativeWrite(JN
     return 0;
 }
 
-JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksWriter_nativeFlush(JNIEnv* env, jobject jobj,
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksWriter_nativeFlush(JNIEnv* env, jobject jobj,
                                                                               jlong handler) {
     StarrocksFormatWriter* tablet_writer = reinterpret_cast<StarrocksFormatWriter*>(handler);
     SAFE_CALL_WRITER_FUNCATION(tablet_writer, {
@@ -184,7 +184,7 @@ JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksWriter_nativeFlush(JN
     return 0;
 }
 
-JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksWriter_nativeFinish(JNIEnv* env, jobject jobj,
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksWriter_nativeFinish(JNIEnv* env, jobject jobj,
                                                                                jlong handler) {
     StarrocksFormatWriter* tablet_writer = reinterpret_cast<StarrocksFormatWriter*>(handler);
     SAFE_CALL_WRITER_FUNCATION(tablet_writer, {
@@ -197,7 +197,7 @@ JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksWriter_nativeFinish(J
     return 0;
 }
 
-JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksWriter_createNativeChunk(JNIEnv* env, jobject jobj,
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksWriter_createNativeChunk(JNIEnv* env, jobject jobj,
                                                                                     jlong handler, jint capacity) {
     StarrocksFormatWriter* tablet_writer = reinterpret_cast<StarrocksFormatWriter*>(handler);
     SAFE_CALL_WRITER_FUNCATION(tablet_writer, {
@@ -208,7 +208,7 @@ JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksWriter_createNativeCh
 }
 
 // reader function
-JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksReader_createNativeReader(JNIEnv* env, jobject jobj,
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksReader_createNativeReader(JNIEnv* env, jobject jobj,
                                                                                      jlong jtablet_id, jlong jversion,
                                                                                      jbyteArray jrequired_schema,
                                                                                      jstring jtable_root_path,
@@ -235,7 +235,7 @@ JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksReader_createNativeRe
     return reinterpret_cast<int64_t>(format_Reader);
 }
 
-JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksReader_destroyNativeReader(JNIEnv* env, jobject jobj,
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksReader_destroyNativeReader(JNIEnv* env, jobject jobj,
                                                                                       jlong handler) {
     StarrocksFormatReader* tablet_reader = reinterpret_cast<StarrocksFormatReader*>(handler);
     SAFE_CALL_READER_FUNCATION(tablet_reader, { delete tablet_reader; });
@@ -243,7 +243,7 @@ JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksReader_destroyNativeR
     return 0;
 }
 
-JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksReader_nativeOpen(JNIEnv* env, jobject jobj, jlong handler) {
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksReader_nativeOpen(JNIEnv* env, jobject jobj, jlong handler) {
     StarrocksFormatReader* tablet_reader = reinterpret_cast<StarrocksFormatReader*>(handler);
     SAFE_CALL_READER_FUNCATION(tablet_reader, {
         Status st = tablet_reader->open();
@@ -255,14 +255,14 @@ JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksReader_nativeOpen(JNI
     return 0;
 }
 
-JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksReader_nativeClose(JNIEnv* env, jobject jobj,
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksReader_nativeClose(JNIEnv* env, jobject jobj,
                                                                               jlong handler) {
     StarrocksFormatReader* tablet_reader = reinterpret_cast<StarrocksFormatReader*>(handler);
     SAFE_CALL_READER_FUNCATION(tablet_reader, { tablet_reader->close(); });
     return 0;
 }
 
-JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarrocksReader_nativeGetNext(JNIEnv* env, jobject jobj,
+JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksReader_nativeGetNext(JNIEnv* env, jobject jobj,
                                                                                 jlong handler) {
     StarrocksFormatReader* tablet_reader = reinterpret_cast<StarrocksFormatReader*>(handler);
     SAFE_CALL_READER_FUNCATION(tablet_reader, {
