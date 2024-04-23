@@ -24,6 +24,20 @@ jobs:
       - name: be
         commands:
           # -j 12 to avoid kill by system while linking
-          - sh run-be-ut.sh -j 12
+          - sh run-be-ut.sh --use-staros -j 12
+
+
+  starrocks_format_sdk:
+    image:  hub.byted.org/compile/emr-starrocks-lh-3.1-builder:412c9075707bcf65af9f7f7a8f53f506
+    working-directory: emr-core/StarRocks
+    runs-on:
+      spec: m1.8xlarge
+    steps:
+      - name: run-sr-format-sdk-test
+        commands:
+          - mkdir -p /root/.m2/
+          - cp .codebase/settings.xml /root/.m2/
+          - export BUILD_TYPE=Debug
+          - sh .codebase/run-sr-format-sdk-test.sh
 
 
