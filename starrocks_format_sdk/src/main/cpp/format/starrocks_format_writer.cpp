@@ -1,0 +1,136 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include <glog/logging.h>
+
+#include "starrocks_format_writer.h"
+
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "common/status.h"
+#include "format_utils.h"
+#include "starrocks_format/starrocks_lib.h"
+#include "storage/chunk_helper.h"
+#include "storage/lake/tablet.h"
+#include "storage/lake/tablet_writer.h"
+#include "storage/protobuf_file.h"
+#include "storage/tablet_schema.h"
+
+namespace starrocks::lake::format {
+
+StarrocksFormatWriter::StarrocksFormatWriter(int64_t tablet_id, std::shared_ptr<TabletSchema>& tablet_schema,
+                                             int64_t txn_id, std::string& tablet_root_path,
+                                             std::unordered_map<std::string, std::string>& options)
+        : _tablet_id(tablet_id),
+          _tablet_schema(tablet_schema),
+          _txn_id(txn_id),
+          _tablet_root_path(tablet_root_path),
+          _options(options) {
+
+    _provider = std::make_shared<FixedLocationProvider>(tablet_root_path);
+    _tablet = std::make_unique<Tablet>(_lake_tablet_manager, _tablet_id, _provider, _tablet_schema);
+
+    _writer_type = WriterType::kHorizontal;
+    auto it = _options.find("starrocks.format.writer_type");
+    if (it != _options.end()) {
+        std::string writer_type = it->second;
+        _writer_type = WriterType(std::stoi(writer_type));
+    }
+    _max_rows_per_segment =
+            getIntOrDefault(_options, "starrocks.format.rows_per_segment", std::numeric_limits<uint32_t>::max());
+}
+
+Status StarrocksFormatWriter::open() {
+    if (!_tablet_writer) {
+        ASSIGN_OR_RETURN(_tablet_writer, _tablet->new_writer(_writer_type, _txn_id, _max_rows_per_segment));
+        // support the below file system options, same as hadoop aws fs options
+        // fs.s3a.path.style.access
+        // fs.s3a.access.key
+        // fs.s3a.secret.key
+        // fs.s3a.endpoint
+        // fs.s3a.endpoint.region
+        // fs.s3a.connection.ssl.enabled
+        // fs.s3a.retry.limit
+        // fs.s3a.retry.interval
+        auto fs_options = filter_map_by_key_prefix(_options, "fs.");
+        ASSIGN_OR_RETURN(auto fs, FileSystem::Create(_tablet_root_path, FSOptions(fs_options)));
+        _tablet_writer->set_fs(fs);
+        _tablet_writer->set_location_provider(_provider);
+    }
+    return _tablet_writer->open();
+}
+
+void StarrocksFormatWriter::close() {
+    _tablet_writer->close();
+}
+
+Status StarrocksFormatWriter::write(StarrocksFormatChunk* chunk) {
+    if (chunk != nullptr && chunk->chunk()->num_rows() > 0) {
+        return _tablet_writer->write(*chunk->chunk().get());
+    }
+    return Status::OK();
+}
+
+Status StarrocksFormatWriter::flush() {
+    return _tablet_writer->flush();
+}
+
+Status StarrocksFormatWriter::finish() {
+    _tablet_writer->finish();
+    return finish_txn_log();
+}
+
+StarrocksFormatChunk* StarrocksFormatWriter::new_chunk(size_t capacity) {
+    StarrocksFormatChunk* format_chunk = new StarrocksFormatChunk(_tablet_schema, capacity);
+    return format_chunk;
+}
+
+Status StarrocksFormatWriter::finish_txn_log() {
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(_tablet_id);
+    txn_log->set_txn_id(_txn_id);
+    auto op_write = txn_log->mutable_op_write();
+    for (auto& f : _tablet_writer->files()) {
+        if (is_segment(f.path)) {
+            op_write->mutable_rowset()->add_segments(std::move(f.path));
+            op_write->mutable_rowset()->add_segment_size(f.size.value());
+        } else if (is_del(f.path)) {
+            op_write->add_dels(std::move(f.path));
+        } else {
+            return Status::InternalError(fmt::format("unknown file {}", f.path));
+        }
+    }
+    op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
+    op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
+    op_write->mutable_rowset()->set_overlapped(false);
+    return put_txn_log(std::move(txn_log));
+}
+
+Status StarrocksFormatWriter::put_txn_log(const TxnLogPtr& log) {
+    if (UNLIKELY(!log->has_tablet_id())) {
+        return Status::InvalidArgument("txn log does not have tablet id");
+    }
+    if (UNLIKELY(!log->has_txn_id())) {
+        return Status::InvalidArgument("txn log does not have txn id");
+    }
+
+    auto txn_log_path = _provider->txn_log_location(log->tablet_id(), log->txn_id());
+    auto fs_options = filter_map_by_key_prefix(_options, "fs.");
+    ASSIGN_OR_RETURN(auto fs, FileSystem::Create(txn_log_path, FSOptions(fs_options)));
+    ProtobufFile file(txn_log_path, fs);
+    return file.save(*log);
+
+    return Status::OK();
+}
+} // namespace starrocks::lake

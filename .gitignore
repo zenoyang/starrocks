@@ -81,4 +81,5 @@ be/tags
 !.github
 build/
 cmake-build-debug/
-CMakeLists.txt
+starrocks_format_sdk/target/
+

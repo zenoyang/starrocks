@@ -1,0 +1,149 @@
+package com.starrocks.format;
+
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.UUID;
+
+public class JniLoader {
+    public static final String KEY_STARROCKS_FORMAT_JNI_LIB_PATH = "com.starrocks.format.jni.lib.path";
+    public static final String KEY_STARROCKS_FORMAT_JNI_LIB_NAME = "com.starrocks.format.jni.lib.name";
+    public static final String KEY_STARROCKS_FORMAT_JNI_WRAPPER_NAME = "com.starrocks.format.jni.wrapper.name";
+
+    private static boolean isLoaded = false;
+
+    public static synchronized void loadNativeLibrary(String version) {
+        if (isLoaded) {
+            return;
+        }
+
+        try {
+            // load libstarrocks_format.so
+            String nativeLibName = System.getProperty(KEY_STARROCKS_FORMAT_JNI_LIB_NAME);
+            // Resolve the library file name with a suffix (e.g., dll, .so, etc.)
+            if (nativeLibName == null) {
+                nativeLibName = System.mapLibraryName("starrocks_format");
+            }
+            File nativeLibFile = findNativeLibrary(nativeLibName, version);
+            System.load(nativeLibFile.getAbsolutePath());
+
+            // load starrocks_format_wrapper.so
+            nativeLibName = System.getProperty(KEY_STARROCKS_FORMAT_JNI_WRAPPER_NAME);
+            // Resolve the library file name with a suffix (e.g., dll, .so, etc.)
+            if (nativeLibName == null) {
+                nativeLibName = System.mapLibraryName("starrocks_format_wrapper");
+            }
+            nativeLibFile = findNativeLibrary(nativeLibName, version);
+            System.load(nativeLibFile.getAbsolutePath());
+        } catch (Exception e) {
+            throw e;
+        }
+        isLoaded = true;
+    }
+
+    private static File findNativeLibrary(String nativeLibName, String version) {
+
+        // Try to load the library in provided existed path  */
+        String jniNativeLibraryPath = System.getProperty(KEY_STARROCKS_FORMAT_JNI_LIB_PATH);
+        if (jniNativeLibraryPath != null) {
+            File nativeLib = new File(jniNativeLibraryPath, nativeLibName);
+            if (nativeLib.exists()) {
+                return nativeLib;
+            }
+        }
+        // Load a native library inside a jar file
+        // Temporary folder for the native lib. Use the value of org.xerial.snappy.tempdir or java.io.tmpdir
+        File tempFolder = new File(System.getProperty("java.io.tmpdir"));
+        if (!tempFolder.exists()) {
+            boolean created = tempFolder.mkdirs();
+            if (!created) {
+                // if created == false, it will fail eventually in the later part
+            }
+        }
+
+        // Extract and load a native library inside the jar file
+        return extractLibraryFile(nativeLibName, version, tempFolder.getAbsolutePath());
+    }
+
+
+    private static File extractLibraryFile(String libraryFileName, String libraryVersion, String targetFolder) {
+        String nativeLibraryFilePath = "native/" + libraryFileName;
+        String extractedLibFileName = String.format("%s-%s", libraryFileName, libraryVersion);
+        File extractedLibFile = new File(targetFolder, extractedLibFileName);
+        if (extractedLibFile.exists()) {
+            return extractedLibFile;
+        }
+
+        File extractedLibFileLock = null;
+        boolean success = false;
+        try {
+            // Create the .lck file first to avoid a race condition
+            // with other concurrently running Java processes.
+            extractedLibFileLock = File.createTempFile(extractedLibFileName + "-", ".lck");
+
+            // Extract a native library file into the target directory
+            try (final InputStream reader = JniLoader.class.getClassLoader().getResourceAsStream(nativeLibraryFilePath)) {
+                if (reader == null) {
+                    throw new FileNotFoundException(nativeLibraryFilePath);
+                }
+                Files.copy(reader, extractedLibFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            // Set executable (x) flag to enable Java to load the native library
+            success = extractedLibFile.setReadable(true) &&
+                    extractedLibFile.setWritable(true, true) &&
+                    extractedLibFile.setExecutable(true);
+
+            // Check whether the contents are properly copied from the resource folder
+            try (InputStream nativeIn = JniLoader.class.getClassLoader().getResourceAsStream(nativeLibraryFilePath);
+                 InputStream extractedLibIn = Files.newInputStream(extractedLibFile.toPath())) {
+                if (!contentsEquals(nativeIn, extractedLibIn)) {
+                    throw new RuntimeException(String.format("Failed to write a native library file at %s", extractedLibFile));
+                }
+            }
+            return new File(targetFolder, extractedLibFileName);
+        } catch (IOException e) {
+            throw new RuntimeException("extract " + extractedLibFileName + " failed!", e);
+        } finally {
+            if  (success) {
+                extractedLibFileLock.deleteOnExit();
+            } else {
+                if (extractedLibFile.exists()) {
+                    if (!extractedLibFile.delete()) {
+                        throw new ExceptionInInitializerError("Cannot unpack starrocks format native library /" +
+                                " cannot delete a temporary native library " + extractedLibFile);
+                    }
+                }
+                if (extractedLibFileLock != null && extractedLibFileLock.exists()) {
+                    if (!extractedLibFileLock.delete()) {
+                        throw new ExceptionInInitializerError("Cannot unpack starrocks format native library /" +
+                                " cannot delete a temporary lock file " + extractedLibFileLock);
+                    }
+                }
+            }
+        }
+    }
+
+    private static boolean contentsEquals(InputStream in1, InputStream in2)
+            throws IOException
+    {
+        if (!(in1 instanceof BufferedInputStream)) {
+            in1 = new BufferedInputStream(in1);
+        }
+        if (!(in2 instanceof BufferedInputStream)) {
+            in2 = new BufferedInputStream(in2);
+        }
+
+        int ch = in1.read();
+        while (ch != -1) {
+            int ch2 = in2.read();
+            if (ch != ch2) {
+                return false;
+            }
+            ch = in1.read();
+        }
+        int ch2 = in2.read();
+        return ch2 == -1;
+    }
+
+}
