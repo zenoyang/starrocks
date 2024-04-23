@@ -19,6 +19,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/datum_convert.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::lake::format {
@@ -74,6 +75,17 @@ void StarRocksFormatColumn::append_decimal(std::vector<uint8_t>& value) {
         LOG(WARNING) << "should not here.";
         break;
     }
+}
+
+Status StarRocksFormatColumn::append_string(std::string& value) {
+    if (value.size() > _field->length()) {
+        return Status::InvalidArgument(
+                fmt::format("string length({}) > limit({}), string: {}", value.size(), _field->length(), value));
+    }
+    Datum dt;
+    datum_from_string(get_type_info(LogicalType::TYPE_VARCHAR).get(), &dt, value, nullptr);
+    _column->append_datum(Datum(dt));
+    return Status::OK();
 }
 
 int8_t StarRocksFormatColumn::get_bool(size_t index) {

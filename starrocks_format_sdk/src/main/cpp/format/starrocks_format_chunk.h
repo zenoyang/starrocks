@@ -34,6 +34,7 @@ public:
 
     void append_long(int64_t value);
     void append_decimal(std::vector<uint8_t>& value);
+    Status append_string(std::string& value);
 
     int8_t get_bool(size_t index);
     int8_t get_byte(size_t index);

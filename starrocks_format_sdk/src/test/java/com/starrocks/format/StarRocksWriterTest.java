@@ -72,6 +72,8 @@ public class StarRocksWriterTest extends BaseFormatTest {
                 DB_NAME, tableName, RandomStringUtils.randomAlphabetic(8));
 
         TabletSchemaPB tabletSchema = toPbTabletSchema(restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName));
+
+
         List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
         assertFalse(partitions.isEmpty());
 
@@ -209,6 +211,78 @@ public class StarRocksWriterTest extends BaseFormatTest {
         writer.finish();
         writer.close();
         writer.release();
+    }
+
+    @Test
+    public void testWriteStringExtendLength(@TempDir Path tempDir) throws Exception {
+        TabletSchemaPB.Builder schemaBuilder = TabletSchemaPB.newBuilder()
+                .setId(1)
+                .setKeysType(KeysType.DUP_KEYS)
+                .setCompressionType(CompressionTypePB.LZ4_FRAME);
+
+        ColumnType[] columnTypes = new ColumnType[] {
+                new ColumnType(DataType.CHAR, 9),
+                new ColumnType(DataType.VARCHAR, 17)};
+
+        int colId = 0;
+        for (ColumnType columnType : columnTypes) {
+            schemaBuilder.clearColumn();
+            ColumnPB.Builder columnBuilder = ColumnPB.newBuilder()
+                    .setName("c_" + columnType.getDataType())
+                    .setUniqueId(0)
+                    .setIsKey(true)
+                    .setIsNullable(true)
+                    .setType(columnType.getDataType().getLiteral())
+                    .setLength(columnType.getLength())
+                    .setIndexLength(columnType.getLength())
+                    .setAggregation("none");
+            schemaBuilder.addColumn(columnBuilder.build());
+
+            TabletSchemaPB schema = schemaBuilder
+                    .setNextColumnUniqueId(colId)
+                    // sort key index alway the key column index
+                    .addSortKeyIdxes(0)
+                    // short key size is less than sort keys
+                    .setNumShortKeyColumns(1)
+                    .setNumRowsPerRowBlock(1024)
+                    .build();
+
+            long tabletId = 100L;
+            long txnId = 4;
+
+            String tabletRootPath = tempDir.toAbsolutePath().toString() + "/" + columnType.getDataType();
+            File dir = new File(tabletRootPath + "/data");
+            assertTrue(dir.mkdirs());
+            dir = new File(tabletRootPath + "/log");
+            assertTrue(dir.mkdirs());
+            StarRocksWriter writer = new StarRocksWriter(tabletId,
+                    schema,
+                    txnId,
+                    tabletRootPath,
+                    new HashMap<>(0));
+            writer.open();
+
+            // write use chunk interface
+            Chunk chunk = writer.newChunk(5);
+            Column column = chunk.getColumn(0);
+
+            // normal append
+            String value = generateFixedLengthString(columnType.getLength());
+            column.appendString(value);
+
+            // abnormal append
+            try {
+                value = generateFixedLengthString(columnType.getLength() + 1 );
+                column.appendString(value);
+                fail("append long string should failed.");
+            } catch (Exception e) {
+                assertTrue(e.getMessage().contains("string length"), e.getMessage());
+            }
+
+            chunk.release();
+            writer.release();
+        }
+
     }
 
     @Test
@@ -450,5 +524,13 @@ public class StarRocksWriterTest extends BaseFormatTest {
                 }
             }
         }
+    }
+
+    public static String generateFixedLengthString(int length) {
+        StringBuilder stringBuilder = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            stringBuilder.append('a');
+        }
+        return stringBuilder.toString();
     }
 }

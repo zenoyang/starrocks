@@ -21,7 +21,6 @@
 #include <string_view>
 #include <vector>
 
-#include "column/datum_convert.h"
 #include "format/starrocks_format_chunk.h"
 #include "jni_utils.h"
 
@@ -321,9 +320,10 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendString(JNIEn
     SAFE_CALL_COLUMN_FUNCATION(column, {
         std::string value = jstring_to_cstring(env, jvalue);
         VLOG(10) << " append string :" << value;
-        Datum dt;
-        datum_from_string(get_type_info(LogicalType::TYPE_VARCHAR).get(), &dt, value, nullptr);
-        column->column()->append_datum(Datum(dt));
+        Status st = column->append_string(value);
+        if (!st.ok()) {
+            env->ThrowNew(kRuntimeExceptionClass, st.message().get_data());
+        }
     });
 }
 
