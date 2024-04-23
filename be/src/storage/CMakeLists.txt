@@ -23,7 +23,7 @@ endif()
 
 add_subdirectory(rowset)
 
-add_library(Storage STATIC
+set(STORAGE_FILES
     aggregate_type.cpp
     base_tablet.cpp
     decimal12.cpp
@@ -189,7 +189,6 @@ add_library(Storage STATIC
     lake/replication_txn_manager.cpp
     lake/rowset.cpp
     lake/schema_change.cpp
-    lake/starlet_location_provider.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
     lake/tablet_reader.cpp
@@ -204,6 +203,7 @@ add_library(Storage STATIC
     lake/vertical_compaction_task.cpp
     lake/metacache.cpp
     lake/lake_primary_key_recover.cpp
+    lake/lake_delvec_loader.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
@@ -218,3 +218,12 @@ add_library(Storage STATIC
     persistent_index_tablet_loader.cpp
     lake/lake_local_persistent_index_tablet_loader.cpp
     primary_key_dump.cpp)
+
+if (NOT BUILD_FORMAT_LIB)
+    list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
+    message(STATUS "include starlet_location_provider.cpp when build Storage.")
+endif()
+
+add_library(Storage STATIC
+    ${STORAGE_FILES}
+)

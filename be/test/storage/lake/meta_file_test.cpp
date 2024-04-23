@@ -60,16 +60,16 @@ public:
 
         s_location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
         s_mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        s_update_manager = std::make_unique<lake::UpdateManager>(s_location_provider.get(), s_mem_tracker.get());
+        s_update_manager = std::make_unique<lake::UpdateManager>(s_location_provider, s_mem_tracker.get());
         s_tablet_manager =
-                std::make_unique<lake::TabletManager>(s_location_provider.get(), s_update_manager.get(), 1638400000);
+                std::make_unique<lake::TabletManager>(s_location_provider, s_update_manager.get(), 1638400000);
     }
 
     static void TearDownTestCase() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
 
 protected:
     constexpr static const char* const kTestDir = "./lake_meta_test";
-    inline static std::unique_ptr<lake::LocationProvider> s_location_provider;
+    inline static std::shared_ptr<lake::LocationProvider> s_location_provider;
     inline static std::unique_ptr<TabletManager> s_tablet_manager;
     inline static std::unique_ptr<MemTracker> s_mem_tracker;
     inline static std::unique_ptr<UpdateManager> s_update_manager;
@@ -123,8 +123,9 @@ TEST_F(MetaFileTest, test_delvec_rw) {
 
     // 3. read delvec
     DelVector after_delvec;
+    LakeIOOptions lake_io_opts;
     ASSIGN_OR_ABORT(auto metadata2, s_tablet_manager->get_tablet_metadata(tablet_id, version));
-    EXPECT_TRUE(get_del_vec(s_tablet_manager.get(), *metadata2, segment_id, &after_delvec).ok());
+    EXPECT_TRUE(get_del_vec(s_tablet_manager.get(), *metadata2, segment_id, lake_io_opts, &after_delvec).ok());
     EXPECT_EQ(before_delvec, after_delvec.save());
 
     // 4. read meta
@@ -224,8 +225,9 @@ TEST_F(MetaFileTest, test_delvec_read_loop) {
 
         // 3. read delvec
         DelVector after_delvec;
+        LakeIOOptions lake_io_opts;
         ASSIGN_OR_ABORT(auto meta, s_tablet_manager->get_tablet_metadata(tablet_id, version));
-        EXPECT_TRUE(get_del_vec(s_tablet_manager.get(), *meta, segment_id, &after_delvec).ok());
+        EXPECT_TRUE(get_del_vec(s_tablet_manager.get(), *meta, segment_id, lake_io_opts, &after_delvec).ok());
         EXPECT_EQ(before_delvec, after_delvec.save());
     };
     for (uint32_t segment_id = 1000; segment_id < 1200; segment_id++) {

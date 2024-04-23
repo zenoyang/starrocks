@@ -524,7 +524,9 @@ void OlapScanConjunctsManager::normalize_predicate(const SlotDescriptor& slot,
     normalize_not_in_or_not_equal_predicate<SlotType, RangeValueType>(slot, range);
     normalize_is_null_predicate(slot);
     // Must handle join runtime filter last
-    normalize_join_runtime_filter<SlotType, RangeValueType>(slot, range);
+    if (runtime_filters != nullptr) {
+        normalize_join_runtime_filter<SlotType, RangeValueType>(slot, range);
+    }
 }
 
 struct ColumnRangeBuilder {

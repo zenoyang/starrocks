@@ -16,6 +16,7 @@
 
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
+#include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
@@ -56,9 +57,13 @@ Rowset::~Rowset() {
 // TODO: support
 //  1. rowid range and short key range
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options) {
-    auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
+    if (options.lake_io_opts.fs) {
+        seg_options.fs = options.lake_io_opts.fs;
+    } else {
+        auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
+        ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
+    }
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
     seg_options.predicates = options.predicates;
@@ -74,7 +79,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.lake_io_opts = options.lake_io_opts;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
-        seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet_mgr->update_mgr(), nullptr);
+        seg_options.delvec_loader =
+                std::make_shared<LakeDelvecLoader>(_tablet_mgr, nullptr, seg_options.lake_io_opts);
         seg_options.version = options.version;
         seg_options.tablet_id = tablet_id();
         seg_options.rowset_id = metadata().id();
@@ -82,6 +88,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(_index);
     }
+    seg_options.reader_type = options.reader_type;
 
     std::unique_ptr<Schema> segment_schema_guard;
     auto* segment_schema = const_cast<Schema*>(&schema);
@@ -109,7 +116,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     }
 
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, options.lake_io_opts.fill_data_cache, options.lake_io_opts.buffer_size));
+    RETURN_IF_ERROR(load_segments(&segments, seg_options));
     for (auto& seg_ptr : segments) {
         if (seg_ptr->num_rows() == 0) {
             continue;
@@ -191,8 +198,11 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
+    seg_options.lake_io_opts.fs = seg_options.fs;
+    seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();
     seg_options.is_primary_keys = true;
-    seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet_mgr->update_mgr(), builder);
+    seg_options.delvec_loader =
+            std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, seg_options.lake_io_opts);
     seg_options.version = version;
     seg_options.tablet_id = tablet_id();
     seg_options.rowset_id = metadata().id();
@@ -210,24 +220,28 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
-    LakeIOOptions lake_io_opts{.fill_data_cache = fill_cache};
-    return segments(lake_io_opts, fill_cache);
+    LakeIOOptions lake_io_opts{.fill_data_cache = fill_cache, .fill_metadata_cache = fill_cache};
+    return segments(lake_io_opts);
 }
 
-StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_opts, bool fill_metadata_cache) {
+StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_opts) {
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, lake_io_opts, fill_metadata_cache));
+    SegmentReadOptions seg_options;
+    seg_options.lake_io_opts = lake_io_opts;
+    RETURN_IF_ERROR(load_segments(&segments, seg_options));
     return segments;
 }
 
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size) {
-    LakeIOOptions lake_io_opts{.fill_data_cache = fill_cache, .buffer_size = buffer_size};
-    return load_segments(segments, lake_io_opts, fill_cache);
+    SegmentReadOptions seg_options;
+    seg_options.lake_io_opts.fill_data_cache = fill_cache;
+    seg_options.lake_io_opts.fill_metadata_cache = fill_cache;
+    seg_options.lake_io_opts.buffer_size = buffer_size;
+    return load_segments(segments, seg_options);
 }
 
-Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOptions& lake_io_opts,
-                             bool fill_metadata_cache) {
-#ifndef BE_TEST
+Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options) {
+#if !defined BE_TEST && !defined(BUILD_FORMAT_LIB)
     RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("LoadSegments"));
 #endif
 
@@ -249,15 +263,20 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOpti
     int index = 0;
 
     for (const auto& seg_name : metadata().segments()) {
-        auto segment_path = _tablet_mgr->segment_location(tablet_id(), seg_name);
-        auto segment_info = FileInfo{.path = segment_path};
+        std::string segment_path;
+        if (seg_options.lake_io_opts.location_provider) {
+            segment_path = seg_options.lake_io_opts.location_provider->segment_location(tablet_id(), seg_name);
+        } else {
+            segment_path = _tablet_mgr->segment_location(tablet_id(), seg_name);
+        }
+        auto segment_info = FileInfo{.path = segment_path, .fs = seg_options.fs};
         if (LIKELY(has_segment_size)) {
             segment_info.size = files_to_size.Get(index);
         }
         index++;
 
-        auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id++, &footer_size_hint, lake_io_opts,
-                                                    fill_metadata_cache, _tablet_schema);
+        auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id++, &footer_size_hint, seg_options.lake_io_opts,
+                                                    seg_options.lake_io_opts.fill_metadata_cache, _tablet_schema);
         if (segment_or.ok()) {
             segments->emplace_back(std::move(segment_or.value()));
         } else if (segment_or.status().is_not_found() && ignore_lost_segment) {
