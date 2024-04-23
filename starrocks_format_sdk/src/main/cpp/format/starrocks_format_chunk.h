@@ -22,12 +22,12 @@
 
 namespace starrocks::lake::format {
 
-class StarrocksFormatColumn {
+class StarRocksFormatColumn {
 public:
-    StarrocksFormatColumn(Column* column, Field* field) : _column(column), _field(field){};
+    StarRocksFormatColumn(Column* column, Field* field) : _column(column), _field(field){};
 
-    StarrocksFormatColumn(StarrocksFormatColumn&&) = default;
-    StarrocksFormatColumn& operator=(StarrocksFormatColumn&&) = default;
+    StarRocksFormatColumn(StarRocksFormatColumn&&) = default;
+    StarRocksFormatColumn& operator=(StarRocksFormatColumn&&) = default;
 
     Column* column() { return _column; };
     Field* field() { return _field; };
@@ -54,29 +54,29 @@ public:
 
 private:
     // we should not maintain _column and _field 's memory,
-    // because the memory of _column is maintained by StarrocksFormatChunk's member _chunk
+    // because the memory of _column is maintained by StarRocksFormatChunk's member _chunk
     // the memory of _column will be released in _chunk's destructor,
-    // release StarrocksFormatChunk will release it member _chunk and _columns
+    // release StarRocksFormatChunk will release it member _chunk and _columns
     Column* _column;
     Field* _field;
 };
 
-class StarrocksFormatChunk {
+class StarRocksFormatChunk {
 public:
-    StarrocksFormatChunk(ChunkUniquePtr chunk);
-    StarrocksFormatChunk(std::shared_ptr<TabletSchema> tablet_schema, size_t capacity);
+    StarRocksFormatChunk(ChunkUniquePtr chunk);
+    StarRocksFormatChunk(std::shared_ptr<TabletSchema> tablet_schema, size_t capacity);
 
-    StarrocksFormatChunk(StarrocksFormatChunk&&) = default;
-    StarrocksFormatChunk& operator=(StarrocksFormatChunk&&) = default;
+    StarRocksFormatChunk(StarRocksFormatChunk&&) = default;
+    StarRocksFormatChunk& operator=(StarRocksFormatChunk&&) = default;
 
     void resolve_columns(ChunkUniquePtr& chunk);
     ChunkUniquePtr& chunk() { return _chunk; };
 
-    StarrocksFormatColumn* get_column_by_index(size_t idx);
+    StarRocksFormatColumn* get_column_by_index(size_t idx);
     void reset();
 private:
     ChunkUniquePtr _chunk;
-    std::vector<std::unique_ptr<StarrocksFormatColumn>> _columns;
+    std::vector<std::unique_ptr<StarRocksFormatColumn>> _columns;
 };
 
 } // namespace starrocks::lake

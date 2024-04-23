@@ -25,22 +25,22 @@ import java.util.List;
 public class Chunk {
 
     private long nativeHandler = 0;
-    private TabletSchema.TabletSchemaPB schema;
-    private List<Column> columns = new ArrayList<Column>();
+    private TabletSchema.TabletSchemaPB outputSchema;
+    private List<Column> columns = new ArrayList<>();
 
     private boolean released = false;
 
-    Chunk(long chunkHandler, TabletSchema.TabletSchemaPB schema) {
+    Chunk(long chunkHandler, TabletSchema.TabletSchemaPB outputSchema) {
         this.nativeHandler = chunkHandler;
-        this.schema = schema;
+        this.outputSchema = outputSchema;
         long chunkColumnCount = columnCount();
-        if (columnCount() != schema.getColumnCount()) {
+        if (columnCount() != outputSchema.getColumnCount()) {
             throw new IllegalArgumentException("Chunk's column count(" + chunkColumnCount
-                    + ") is not same as schema column count" + schema.getColumnCount() + ")");
+                    + ") is not same as output schema column count (" + outputSchema.getColumnCount() + ")");
         }
-        for (int index = 0; index < schema.getColumnCount(); index++) {
+        for (int index = 0; index < outputSchema.getColumnCount(); index++) {
             long columnHandler = nativeGetColumn(nativeHandler, index);
-            TabletSchema.ColumnPB columnPB = this.schema.getColumn(index);
+            TabletSchema.ColumnPB columnPB = this.outputSchema.getColumn(index);
             Column column = new Column(columnHandler, columnPB);
             columns.add(column);
         }
@@ -51,7 +51,7 @@ public class Chunk {
     }
 
     public TabletSchema.TabletSchemaPB getSchema() {
-        return schema;
+        return outputSchema;
     }
 
     public long numRow() {

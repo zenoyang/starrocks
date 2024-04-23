@@ -29,7 +29,7 @@
 
 namespace starrocks::lake::format {
 
-StarrocksFormatWriter::StarrocksFormatWriter(int64_t tablet_id, std::shared_ptr<TabletSchema>& tablet_schema,
+StarRocksFormatWriter::StarRocksFormatWriter(int64_t tablet_id, std::shared_ptr<TabletSchema>& tablet_schema,
                                              int64_t txn_id, std::string& tablet_root_path,
                                              std::unordered_map<std::string, std::string>& options)
         : _tablet_id(tablet_id),
@@ -51,7 +51,7 @@ StarrocksFormatWriter::StarrocksFormatWriter(int64_t tablet_id, std::shared_ptr<
             getIntOrDefault(_options, "starrocks.format.rows_per_segment", std::numeric_limits<uint32_t>::max());
 }
 
-Status StarrocksFormatWriter::open() {
+Status StarRocksFormatWriter::open() {
     if (!_tablet_writer) {
         ASSIGN_OR_RETURN(_tablet_writer, _tablet->new_writer(_writer_type, _txn_id, _max_rows_per_segment));
         // support the below file system options, same as hadoop aws fs options
@@ -71,32 +71,32 @@ Status StarrocksFormatWriter::open() {
     return _tablet_writer->open();
 }
 
-void StarrocksFormatWriter::close() {
+void StarRocksFormatWriter::close() {
     _tablet_writer->close();
 }
 
-Status StarrocksFormatWriter::write(StarrocksFormatChunk* chunk) {
+Status StarRocksFormatWriter::write(StarRocksFormatChunk* chunk) {
     if (chunk != nullptr && chunk->chunk()->num_rows() > 0) {
         return _tablet_writer->write(*chunk->chunk().get());
     }
     return Status::OK();
 }
 
-Status StarrocksFormatWriter::flush() {
+Status StarRocksFormatWriter::flush() {
     return _tablet_writer->flush();
 }
 
-Status StarrocksFormatWriter::finish() {
+Status StarRocksFormatWriter::finish() {
     _tablet_writer->finish();
     return finish_txn_log();
 }
 
-StarrocksFormatChunk* StarrocksFormatWriter::new_chunk(size_t capacity) {
-    StarrocksFormatChunk* format_chunk = new StarrocksFormatChunk(_tablet_schema, capacity);
+StarRocksFormatChunk* StarRocksFormatWriter::new_chunk(size_t capacity) {
+    StarRocksFormatChunk* format_chunk = new StarRocksFormatChunk(_tablet_schema, capacity);
     return format_chunk;
 }
 
-Status StarrocksFormatWriter::finish_txn_log() {
+Status StarRocksFormatWriter::finish_txn_log() {
     auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(_tablet_id);
     txn_log->set_txn_id(_txn_id);
@@ -117,7 +117,7 @@ Status StarrocksFormatWriter::finish_txn_log() {
     return put_txn_log(std::move(txn_log));
 }
 
-Status StarrocksFormatWriter::put_txn_log(const TxnLogPtr& log) {
+Status StarRocksFormatWriter::put_txn_log(const TxnLogPtr& log) {
     if (UNLIKELY(!log->has_tablet_id())) {
         return Status::InvalidArgument("txn log does not have tablet id");
     }

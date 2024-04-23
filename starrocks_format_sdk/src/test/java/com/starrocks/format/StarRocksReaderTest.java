@@ -23,6 +23,7 @@ import com.starrocks.proto.TabletSchema.ColumnPB;
 import com.starrocks.proto.TabletSchema.TabletSchemaPB;
 import com.starrocks.proto.Types.CompressionTypePB;
 import org.apache.commons.lang3.RandomUtils;
+import org.junit.Ignore;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -37,11 +38,7 @@ import java.math.RoundingMode;
 import java.nio.file.Path;
 import java.sql.Date;
 import java.sql.Timestamp;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -85,7 +82,7 @@ public class StarRocksReaderTest extends BaseFormatTest {
                 Long tabletId = tablet.getId();
 
                 StarRocksReader reader = new StarRocksReader(
-                        tabletId, version, tabletSchema, partition.getStoragePath(), settings.toMap());
+                        tabletId, version, tabletSchema, tabletSchema, partition.getStoragePath(), settings.toMap());
                 reader.open();
 
                 long numRows;
@@ -165,7 +162,7 @@ public class StarRocksReaderTest extends BaseFormatTest {
                     options.put(STARROCKS_FORMAT_QUERY_PLAN, queryPlan);
                     // read table
                     StarRocksReader reader = new StarRocksReader(
-                            tabletId, version, tabletSchema, partition.getStoragePath(), options);
+                            tabletId, version, tabletSchema, tabletSchema, partition.getStoragePath(), options);
                     reader.open();
 
                     long numRows;
@@ -174,6 +171,79 @@ public class StarRocksReaderTest extends BaseFormatTest {
                         numRows = chunk.numRow();
 
                         checkValue(tabletSchema, chunk, numRows);
+                        chunk.release();
+
+                        totalRows += numRows;
+                    } while (numRows > 0);
+
+                    // should be empty chunk
+                    Chunk chunk = reader.getNext();
+                    assertEquals(0, chunk.numRow());
+                    chunk.release();
+
+                    reader.close();
+                    reader.release();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    fail();
+                }
+
+            }
+        }
+
+        assertEquals(expectedTotalRows, totalRows);
+    }
+
+    @Ignore
+    public void testReadWithFilterProject() throws Exception {
+        String tableName = "tb_all_primitivetype_read_two_key_unique";
+        long version = 3;
+        long expectedTotalRows = 2;
+        String sql = "select c_date, c_datetime from tb_all_primitivetype_read_two_key_unique where c_smallint = 30";
+        Set<String> requiredColumnName = new HashSet<>(Arrays.asList("c_date", "c_datetime", "c_smallint"));
+        Set<String> outputColumnName = new HashSet<>(Arrays.asList("c_date", "c_datetime"));
+
+        TabletSchemaPB tabletAllSchema = toPbTabletSchema(restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName));
+        List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
+        assertFalse(partitions.isEmpty());
+
+        String queryPlan = restClient.getQueryPlan(DB_NAME, tableName, sql).toString();
+
+        TabletSchemaPB.Builder builder = tabletAllSchema.toBuilder().clearColumn();
+        List<TabletSchema.ColumnPB> pbColumns = tabletAllSchema.getColumnList().stream()
+                .filter(col -> requiredColumnName.contains(col.getName().toLowerCase()))
+                .collect(Collectors.toList());
+
+        builder.addAllColumn(pbColumns);
+        TabletSchemaPB requiredSchema = builder.build();
+
+
+        pbColumns = tabletAllSchema.getColumnList().stream()
+                .filter(col -> outputColumnName.contains(col.getName().toLowerCase()))
+                .collect(Collectors.toList());
+
+        TabletSchemaPB outputSchema = builder.clearColumn().addAllColumn(pbColumns).build();
+
+        // read chunk
+        long totalRows = 0;
+        for (TablePartition partition : partitions) {
+            for (TablePartition.Tablet tablet : partition.getTablets()) {
+                Long tabletId = tablet.getId();
+
+                try {
+                    Map<String, String> options = settings.toMap();
+                    options.put(STARROCKS_FORMAT_QUERY_PLAN, queryPlan);
+                    // read table
+                    StarRocksReader reader = new StarRocksReader(
+                            tabletId, version, requiredSchema, outputSchema, partition.getStoragePath(), options);
+                    reader.open();
+
+                    long numRows;
+                    do {
+                        Chunk chunk = reader.getNext();
+                        numRows = chunk.numRow();
+
+                        checkValue(outputSchema, chunk, numRows);
                         chunk.release();
 
                         totalRows += numRows;
@@ -217,7 +287,7 @@ public class StarRocksReaderTest extends BaseFormatTest {
                         "DAABDAACDwABDAAAAAIIAAEAAAABCAACAAAAHAgAAwAAAAEKAAT//////////w8ABQgAAAABAAAAAQ8ABgIAAAABAAIACAACADMBDAA1DQABCAwAAAABAAAAAw8AAQwAAAABCAABAAAAEAwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAAAMAAAAIAAQAAAAADAAPCAABAAAAAwgAAgAAAAAACAAU/////wgAF/////8CADMAAgA0AQIANgEAAAAOADkIAAAAAAIAOwAACAABAAAAAAgAAgAAACAIAAMAAAAACgAE//////////8PAAUIAAAAAQAAAAAPAAYCAAAAAQAPAAcMAAAAAQ8AAQwAAAADCAABAAAAAgwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAAAIAAAAIAAMAAAANCAAEAAAAAggAFP////8IABkAAAAACAAcAAAABQIAMwECADQBAgA2AQAIAAEAAAAQDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAABQAAAAgABAAAAAAMAA8IAAEAAAABCAACAAAAAAAIABT/////CAAX/////wIAMwACADQBAgA2AQAIAAEAAAAJDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAABQAAAAgABAAAAAAMAAoKAAEAAAAAAAAAAQAIABT/////AgAzAAIANAACADYBAAACAAgAAgAzAQ4AOQgAAAAAAgA7AAwAPwgAAQAAAAAPAAILAAAAAQAAAAVyb3dJZA8AAwgAAAABAAAABQIABAALAAYAAAAgdGJfYWxsX3ByaW1pdGl2ZXR5cGVfcmVhZF91bmlxdWULAAcAAAAMMTogcm93SWQgPiAxAgAIAQ0ACQgIAAAAAA8ACgsAAAAADwALCwAAAAEAAAAFcm93SWQAAAAPAAQMAAAAAQ8AAQwAAAABCAABAAAAEAwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAAAMAAAAIAAQAAAAADAAPCAABAAAAAwgAAgAAAAEACAAU/////wgAF/////8CADMAAgA0AQIANgEAAAwABQgAAQAAAAYMAAgAAAwABggAAQAAAAEPAAIMAAAAAAAADQACCgwAAAADAAAAAAAAJ4EKAAEAAAAAAAAngQoAAgAAAAAAAAADCgADAAAAAAAAAAAIAAQVj2d0AAAAAAAAACeCCgABAAAAAAAAJ4IKAAIAAAAAAAAAAwoAAwAAAAAAAAAACAAEFY9ndAAAAAAAAAAngwoAAQAAAAAAACeDCgACAAAAAAAAAAMKAAMAAAAAAAAAAAgABBWPZ3QADAADDwABDAAAAAMIAAEAAAABCAACAAAAAAwAAw8AAQwAAAABCAABAAAAAAwAAggAAQAAAAUAAAAIAAT/////CAAF/////wgABv////8IAAcAAAABCwAIAAAABXJvd0lkCAAJ/////wIACgECAAsAAAgAAQAAAAMIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAAAwAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAJY190aW55aW50CAAJ/////wIACgECAAsAAAgAAQAAAAMIAAIAAAABDAADDwABDAAAAAEIAAEAAAAADAACCAABAAAAAwAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAACAAJ/////wIACgECAAsAAA8AAgwAAAACCAABAAAAAAgAAv////8IAAP/////CgAEAAAAAAAAJ38IAAX/////AAgAAQAAAAEIAAL/////CAAD/////wgABf////8ADwADDAAAAAEKAAEAAAAAAAAnfwgAAgAAAAEIAAMAAAAQCAAEAAAAAAsABwAAACB0Yl9hbGxfcHJpbWl0aXZldHlwZV9yZWFkX3VuaXF1ZQsACAAAAAAMAAsLAAEAAAAgdGJfYWxsX3ByaW1pdGl2ZXR5cGVfcmVhZF91bmlxdWUAAAAMAAQKAAE1nvOblRtOsgoAArkhOKh0CF2IAAA=");
                 // read table
                 StarRocksReader reader =
-                        new StarRocksReader(tabletId, version, tabletSchema, partition.getStoragePath(), options);
+                        new StarRocksReader(tabletId, version, tabletSchema, tabletSchema, partition.getStoragePath(), options);
                 try {
                     reader.open();
                     fail();
@@ -250,7 +320,7 @@ public class StarRocksReaderTest extends BaseFormatTest {
                 options.put(STARROCKS_FORMAT_QUERY_PLAN, "IAAA=");
                 // read table
                 StarRocksReader reader = new StarRocksReader(
-                        tabletId, version, tabletSchema, partition.getStoragePath(), options);
+                        tabletId, version, tabletSchema, tabletSchema, partition.getStoragePath(), options);
                 try {
                     reader.open();
                     fail();
@@ -319,7 +389,7 @@ public class StarRocksReaderTest extends BaseFormatTest {
                     options.put(STARROCKS_FORMAT_USING_COLUMN_UID, "true");
 
                     StarRocksReader reader =
-                            new StarRocksReader(tabletId, version, pbSchema, partition.getStoragePath(), options);
+                            new StarRocksReader(tabletId, version, pbSchema, pbSchema, partition.getStoragePath(), options);
                     reader.open();
 
                     long numRows;
@@ -417,7 +487,7 @@ public class StarRocksReaderTest extends BaseFormatTest {
         assertTrue(dir.mkdirs());
 
         try {
-            StarRocksReader reader = new StarRocksReader(tabletId, 1, tabletSchema, tabletRootPath, options);
+            StarRocksReader reader = new StarRocksReader(tabletId, 1, tabletSchema, tabletSchema, tabletRootPath, options);
             reader.open();
             fail();
         } catch (Exception e) {
@@ -443,7 +513,7 @@ public class StarRocksReaderTest extends BaseFormatTest {
 
                 try {
                     StarRocksReader reader =
-                            new StarRocksReader(tabletId, version, tabletSchema, partition.getStoragePath(), settings.toMap());
+                            new StarRocksReader(tabletId, version, tabletSchema, tabletSchema, partition.getStoragePath(), settings.toMap());
                     reader.open();
 
                     Chunk chunk = reader.getNext();

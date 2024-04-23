@@ -29,7 +29,7 @@ echo "----------start run starrocks_format_sdk..."
 cd ${STARROCKS_HOME}/starrocks_format_sdk
 export FLAGS_logtostderr=1;
 export LD_LIBRARY_PATH=/var/local/thirdparty/installed/hadoop/lib/native/
-mvn test -Pformat-lib -Pdebug
+mvn test -Pformat-lib
 exit_code=`echo $?`
 if [ $exit_code -ne 0 ];then
   echo "----------run starrocks_format_sdk failed ...."

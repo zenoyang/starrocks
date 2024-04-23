@@ -127,7 +127,6 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     KeysType keys_type = _tablet_schema->keys_type();
     RETURN_IF_ERROR(init_predicates(params));
     RETURN_IF_ERROR(init_delete_predicates(params, &_delete_predicates));
-    LOG(INFO) << "keys " << params.start_key.size() << " " << params.end_key.size();
     RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
     rs_opts.predicates = _pushdown_predicates;

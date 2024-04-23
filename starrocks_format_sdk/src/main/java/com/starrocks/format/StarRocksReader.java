@@ -22,34 +22,38 @@ import com.starrocks.proto.TabletSchema.TabletSchemaPB;
 
 import java.util.Map;
 
+enum ColumnPruneType {
+    REQUIRED,
+    OUTPUT
+}
+
 public class StarRocksReader {
-
     static JniWrapper jniWrapper = JniWrapper.get();
-
-    private final Long tabletId;
-    private final TabletSchemaPB schema;
-    private final String tabletRootPath;
-    private final Map<String, String> options;
-
-    // nativeReader is the c++ StarRocksFormatReader potiner
+    private long tabletId;
+    private TabletSchemaPB requiredSchema;
+    private TabletSchemaPB outputSchema;
+    private String tabletRootPath;
+    private Map<String, String> options;
+    // nativeReader is the c++ StarrocksFormatReader potiner
     private long nativeReader = 0;
 
-    private volatile boolean released = false;
+    private boolean released = false;
 
-    public StarRocksReader(long tabletId,
-                           long version,
-                           TabletSchemaPB schema,
-                           String tabletRootPath,
-                           Map<String, String> options) {
-        checkSchema(schema);
+    public StarRocksReader(long tabletId, long version,
+            TabletSchemaPB requiredSchema,
+            TabletSchemaPB outputSchema,
+            String tabletRootPath, Map<String, String> options) {
+        checkSchema(requiredSchema, ColumnPruneType.REQUIRED);
+        checkSchema(outputSchema, ColumnPruneType.OUTPUT);
         this.tabletId = tabletId;
-        this.schema = schema;
+        this.requiredSchema = requiredSchema;
+        this.outputSchema = outputSchema;
         this.tabletRootPath = tabletRootPath;
         this.options = options;
-        this.nativeReader = createNativeReader(
-                tabletId,
+        nativeReader = createNativeReader(tabletId,
                 version,
-                schema.toByteArray(),
+                requiredSchema.toByteArray(),
+                outputSchema.toByteArray(),
                 tabletRootPath,
                 options);
     }
@@ -67,7 +71,7 @@ public class StarRocksReader {
     public Chunk getNext() {
         checkState();
         long chunkHandler = nativeGetNext(nativeReader);
-        return new Chunk(chunkHandler, schema);
+        return new Chunk(chunkHandler, outputSchema);
     }
 
     public void release() {
@@ -76,9 +80,9 @@ public class StarRocksReader {
         released = true;
     }
 
-    private static void checkSchema(TabletSchemaPB schema) {
-        if (schema == null || schema.getColumnCount() == 0) {
-            throw new IllegalArgumentException("Schema should not be empty.");
+    private static void checkSchema(TabletSchemaPB schema, ColumnPruneType columnPruneType) {
+        if (ColumnPruneType.REQUIRED.equals(columnPruneType) && (schema == null || schema.getColumnCount() == 0)) {
+            throw new RuntimeException("Schema should not be empty!");
         }
 
         for (ColumnPB column : schema.getColumnList()) {
@@ -101,10 +105,11 @@ public class StarRocksReader {
     /* native methods */
 
     public native long createNativeReader(long tabletId,
-                                          long version,
-                                          byte[] schemaPb,
-                                          String tableRootPath,
-                                          Map<String, String> options);
+            long version,
+            byte[] requiredSchemaPb,
+            byte[] outputSchemaPb,
+            String tableRootPath,
+            Map<String, String> options);
 
     public native long nativeOpen(long nativeReader);
 

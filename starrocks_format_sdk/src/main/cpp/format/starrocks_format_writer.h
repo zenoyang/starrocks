@@ -26,14 +26,14 @@
 
 namespace starrocks::lake::format {
 
-class StarrocksFormatWriter {
+class StarRocksFormatWriter {
 public:
-    StarrocksFormatWriter() = default;
-    StarrocksFormatWriter(int64_t tablet_id, std::shared_ptr<TabletSchema>& tablet_schema, int64_t txn_id,
+    StarRocksFormatWriter() = default;
+    StarRocksFormatWriter(int64_t tablet_id, std::shared_ptr<TabletSchema>& tablet_schema, int64_t txn_id,
                           std::string& tablet_root_path, std::unordered_map<std::string, std::string>& options);
 
-    StarrocksFormatWriter(StarrocksFormatWriter&&) = default;
-    StarrocksFormatWriter& operator=(StarrocksFormatWriter&&) = default;
+    StarRocksFormatWriter(StarRocksFormatWriter&&) = default;
+    StarRocksFormatWriter& operator=(StarRocksFormatWriter&&) = default;
 
     int64_t tablet_id() { return _tablet_id; };
 
@@ -45,11 +45,11 @@ public:
 
     Status open();
     void close();
-    Status write(StarrocksFormatChunk* chunk);
+    Status write(StarRocksFormatChunk* chunk);
     Status flush();
     Status finish();
 
-    StarrocksFormatChunk* new_chunk(size_t capacity);
+    StarRocksFormatChunk* new_chunk(size_t capacity);
 
     // write txn log
     Status finish_txn_log();

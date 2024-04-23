@@ -37,7 +37,6 @@ jobs:
         commands:
           - mkdir -p /root/.m2/
           - cp .codebase/settings.xml /root/.m2/
-          - export BUILD_TYPE=Debug
           - sh .codebase/run-sr-format-sdk-test.sh
 
 

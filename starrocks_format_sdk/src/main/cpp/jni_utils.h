@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include "storage/tablet_schema.h"
 
 #define SAFE_CALL_COLUMN_FUNCATION(column, body)                          \
     if (column != nullptr) {                                              \
@@ -165,8 +166,6 @@ static inline std::unordered_map<std::string, std::string> jhashmap_to_cmap(JNIE
     return result;
 }
 
-
-
 // The jvalue is in big-endian byte-order.
 // because BigInteger.toByteArray alway return big-endian byte-order byte array
 // If the first bit is 1, it is a negative number.
@@ -182,11 +181,10 @@ static inline std::vector<uint8_t> jbyteArray_to_carray(JNIEnv* env, jbyteArray 
     return result;
 }
 
-
 // The jvalue is in big-endian byte-order.
 // because BigInteger.toByteArray alway return big-endian byte-order byte array
 // If the first bit is 1, it is a negative number.
-template<typename T>
+template <typename T>
 static inline T BigInteger_to_native_value(JNIEnv* env, jbyteArray jvalue) {
     T value = 0;
 
@@ -215,4 +213,18 @@ static inline T BigInteger_to_native_value(JNIEnv* env, jbyteArray jvalue) {
     env->ReleaseByteArrayElements(jvalue, src_value, 0);
 
     return value;
+}
+
+static inline std::shared_ptr<starrocks::TabletSchema> jbyteArray_to_TableSchema(JNIEnv* env, jbyteArray schema) {
+    // get schema
+    uint32_t j_schema_num_bytes = env->GetArrayLength(schema);
+    int8_t* p_schema = env->GetByteArrayElements(schema, NULL);
+    starrocks::TabletSchemaPB schema_pb;
+    bool parsed = schema_pb.ParseFromArray(p_schema, j_schema_num_bytes);
+    if (!parsed) {
+        LOG(INFO) << " parse schema failed!";
+    }
+    env->ReleaseByteArrayElements(schema, p_schema, 0);
+
+    return starrocks::TabletSchema::create(schema_pb);
 }

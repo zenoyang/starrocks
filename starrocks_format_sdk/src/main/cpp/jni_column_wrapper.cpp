@@ -38,27 +38,27 @@ extern jclass kRuntimeExceptionClass;
 // column relate interface
 JNIEXPORT jlong JNICALL Java_com_starrocks_format_Chunk_nativeGetColumn(JNIEnv* env, jobject jobj, jlong handler,
                                                                         jlong index) {
-    StarrocksFormatChunk* chunk = reinterpret_cast<StarrocksFormatChunk*>(handler);
+    StarRocksFormatChunk* chunk = reinterpret_cast<StarRocksFormatChunk*>(handler);
     SAFE_CALL_CHUNK_FUNCATION(chunk, {
-        StarrocksFormatColumn* column = chunk->get_column_by_index(index);
+        StarRocksFormatColumn* column = chunk->get_column_by_index(index);
         return reinterpret_cast<int64_t>(column);
     })
     return 0;
 }
 
 JNIEXPORT void JNICALL Java_com_starrocks_format_Chunk_nativeReset(JNIEnv* env, jobject jobj, jlong handler) {
-    StarrocksFormatChunk* chunk = reinterpret_cast<StarrocksFormatChunk*>(handler);
+    StarRocksFormatChunk* chunk = reinterpret_cast<StarRocksFormatChunk*>(handler);
     SAFE_CALL_CHUNK_FUNCATION(chunk, { chunk->reset(); })
 }
 
 JNIEXPORT jlong JNICALL Java_com_starrocks_format_Chunk_nativeColumnCount(JNIEnv* env, jobject jobj, jlong handler) {
-    StarrocksFormatChunk* chunk = reinterpret_cast<StarrocksFormatChunk*>(handler);
+    StarRocksFormatChunk* chunk = reinterpret_cast<StarRocksFormatChunk*>(handler);
     SAFE_CALL_CHUNK_FUNCATION(chunk, { return chunk->chunk()->num_columns(); })
     return 0;
 }
 
 JNIEXPORT jlong JNICALL Java_com_starrocks_format_Chunk_nativeNumRows(JNIEnv* env, jobject jobj, jlong handler) {
-    StarrocksFormatChunk* chunk = reinterpret_cast<StarrocksFormatChunk*>(handler);
+    StarRocksFormatChunk* chunk = reinterpret_cast<StarRocksFormatChunk*>(handler);
     SAFE_CALL_CHUNK_FUNCATION(chunk, { return chunk->chunk()->num_rows(); })
     return 0;
 }
@@ -68,7 +68,7 @@ JNIEXPORT jlong JNICALL Java_com_starrocks_format_Chunk_nativeNumRows(JNIEnv* en
 JNIEXPORT jboolean JNICALL Java_com_starrocks_format_Column_nativeIsNullAt(JNIEnv* env, jobject jobj, jlong handler,
                                                                            jlong index) {
     jboolean jvalue = 0;
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, { jvalue = column->column()->is_null(index); });
     return jvalue;
 }
@@ -76,7 +76,7 @@ JNIEXPORT jboolean JNICALL Java_com_starrocks_format_Column_nativeIsNullAt(JNIEn
 JNIEXPORT jboolean JNICALL Java_com_starrocks_format_Column_nativeGetBool(JNIEnv* env, jobject jobj, jlong handler,
                                                                           jlong index) {
     jboolean jvalue = 0;
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, { jvalue = column->get_bool(index); });
     return jvalue;
 }
@@ -84,7 +84,7 @@ JNIEXPORT jboolean JNICALL Java_com_starrocks_format_Column_nativeGetBool(JNIEnv
 JNIEXPORT jbyte JNICALL Java_com_starrocks_format_Column_nativeGetByte(JNIEnv* env, jobject jobj, jlong handler,
                                                                        jlong index) {
     jbyte jvalue = 0;
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, { jvalue = column->get_byte(index); });
     return jvalue;
 }
@@ -92,7 +92,7 @@ JNIEXPORT jbyte JNICALL Java_com_starrocks_format_Column_nativeGetByte(JNIEnv* e
 JNIEXPORT jshort JNICALL Java_com_starrocks_format_Column_nativeGetShort(JNIEnv* env, jobject jobj, jlong handler,
                                                                          jlong index) {
     jshort jvalue = 0;
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, { jvalue = column->get_short(index); });
     return jvalue;
 }
@@ -100,7 +100,7 @@ JNIEXPORT jshort JNICALL Java_com_starrocks_format_Column_nativeGetShort(JNIEnv*
 JNIEXPORT jint JNICALL Java_com_starrocks_format_Column_nativeGetInt(JNIEnv* env, jobject jobj, jlong handler,
                                                                      jlong index) {
     jint jvalue = 0;
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, { jvalue = column->get_int(index); });
     return jvalue;
 }
@@ -108,14 +108,14 @@ JNIEXPORT jint JNICALL Java_com_starrocks_format_Column_nativeGetInt(JNIEnv* env
 JNIEXPORT jlong JNICALL Java_com_starrocks_format_Column_nativeGetLong(JNIEnv* env, jobject jobj, jlong handler,
                                                                        jlong index) {
     jlong jvalue = 0;
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, { jvalue = column->get_long(index); });
     return jvalue;
 }
 
 JNIEXPORT jbyteArray JNICALL Java_com_starrocks_format_Column_nativeGetLargeInt(JNIEnv* env, jobject jobj,
                                                                                 jlong handler, jlong index) {
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         std::vector<uint8_t> value = column->get_largeint(index);
 
@@ -133,7 +133,7 @@ JNIEXPORT jbyteArray JNICALL Java_com_starrocks_format_Column_nativeGetLargeInt(
 JNIEXPORT jfloat JNICALL Java_com_starrocks_format_Column_nativeGetFloat(JNIEnv* env, jobject jobj, jlong handler,
                                                                          jlong index) {
     jfloat jvalue = 0;
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, { jvalue = column->get_float(index); });
     return jvalue;
 }
@@ -141,7 +141,7 @@ JNIEXPORT jfloat JNICALL Java_com_starrocks_format_Column_nativeGetFloat(JNIEnv*
 JNIEXPORT jdouble JNICALL Java_com_starrocks_format_Column_nativeGetDouble(JNIEnv* env, jobject jobj, jlong handler,
                                                                            jlong index) {
     jdouble jvalue = 0;
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, { jvalue = column->get_double(index); });
     return jvalue;
 }
@@ -149,7 +149,7 @@ JNIEXPORT jdouble JNICALL Java_com_starrocks_format_Column_nativeGetDouble(JNIEn
 JNIEXPORT jbyteArray JNICALL Java_com_starrocks_format_Column_nativeGetDecimal(JNIEnv* env, jobject jobj, jlong handler,
                                                                                jlong index) {
     jbyteArray jvalue = 0;
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         std::vector<uint8_t> value = column->get_decimal(index);
         jbyteArray byteArray = env->NewByteArray(value.size());
@@ -166,7 +166,7 @@ JNIEXPORT jbyteArray JNICALL Java_com_starrocks_format_Column_nativeGetDecimal(J
 JNIEXPORT jlong JNICALL Java_com_starrocks_format_Column_nativeGetDate(JNIEnv* env, jobject jobj, jlong handler,
                                                                        jlong index) {
     jlong jvalue = 0;
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, { jvalue = column->get_date(index); });
     return jvalue;
 }
@@ -174,15 +174,15 @@ JNIEXPORT jlong JNICALL Java_com_starrocks_format_Column_nativeGetDate(JNIEnv* e
 JNIEXPORT jlong JNICALL Java_com_starrocks_format_Column_nativeGetTimestamp(JNIEnv* env, jobject jobj, jlong handler,
                                                                             jlong index) {
     jlong jvalue = 0;
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, { jvalue = column->get_timestamp(index); });
     return jvalue;
 }
 
 JNIEXPORT jstring JNICALL Java_com_starrocks_format_Column_nativeGetString(JNIEnv* env, jobject jobj, jlong handler,
                                                                            jlong index) {
-    jstring jvalue;
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    jstring jvalue = 0;
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         std::string value = column->get_string(index);
         jvalue = cstring_to_jstring(env, value);
@@ -191,7 +191,7 @@ JNIEXPORT jstring JNICALL Java_com_starrocks_format_Column_nativeGetString(JNIEn
 }
 
 JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendNull(JNIEnv* env, jobject jobj, jlong handler) {
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         bool result = column->column()->append_nulls(1);
         if (!result) {
@@ -202,7 +202,7 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendNull(JNIEnv*
 
 JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendBool(JNIEnv* env, jobject jobj, jlong handler,
                                                                          jboolean jvalue) {
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         bool value = jvalue;
         VLOG(10) << " append bool :" << value;
@@ -211,7 +211,7 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendBool(JNIEnv*
 }
 JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendByte(JNIEnv* env, jobject jobj, jlong handler,
                                                                          jbyte jvalue) {
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         int8_t value = jvalue;
         VLOG(10) << " append byte :" << value;
@@ -220,7 +220,7 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendByte(JNIEnv*
 }
 JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendShort(JNIEnv* env, jobject jobj, jlong handler,
                                                                           jshort jvalue) {
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         int16_t value = jvalue;
         VLOG(10) << " append short :" << value;
@@ -229,7 +229,7 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendShort(JNIEnv
 }
 JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendInt(JNIEnv* env, jobject jobj, jlong handler,
                                                                         jint jvalue) {
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         int32_t value = jvalue;
         VLOG(10) << " append int :" << value;
@@ -238,7 +238,7 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendInt(JNIEnv* 
 }
 JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendLong(JNIEnv* env, jobject jobj, jlong handler,
                                                                          jlong jvalue) {
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         int64_t value = jvalue;
         VLOG(10) << " append long :" << value;
@@ -249,7 +249,7 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendLong(JNIEnv*
 // The jvalue is in big-endian byte-order. because BigInteger.toByteArray alway return big-endian byte-order byte array
 JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendLargeInt(JNIEnv* env, jobject jobj, jlong handler,
                                                                              jbyteArray jvalue) {
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         int128_t value = BigInteger_to_native_value<int128_t>(env, jvalue);
         VLOG(10) << " append LARGEINT with low bit is :" << (int64_t)(value & 0xFFFFFFFFFFFFFFFF);
@@ -258,7 +258,7 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendLargeInt(JNI
 }
 JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendFloat(JNIEnv* env, jobject jobj, jlong handler,
                                                                           jfloat jvalue) {
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         float value = jvalue;
         VLOG(10) << " append float :" << value;
@@ -267,7 +267,7 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendFloat(JNIEnv
 }
 JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendDouble(JNIEnv* env, jobject jobj, jlong handler,
                                                                            jdouble jvalue) {
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         double value = jvalue;
         VLOG(10) << " append double :" << value;
@@ -279,7 +279,7 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendDouble(JNIEn
 // jvalue is the int value of decimal.
 JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendDecimal(JNIEnv* env, jobject jobj, jlong handler,
                                                                             jbyteArray jvalue) {
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         // int128_t value = BigInteger_to_native_value<int128_t>(env, jvalue);
         std::vector<uint8_t> value = jbyteArray_to_carray(env, jvalue);
@@ -290,7 +290,7 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendDecimal(JNIE
 // jvalue is the number of milliseconds since January 1, 1970, 00:00:00 GMT
 JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendDate(JNIEnv* env, jobject jobj, jlong handler,
                                                                          jlong jvalue) {
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         TimestampValue ts;
         int64_t seconds = jvalue / 1000;
@@ -304,7 +304,7 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendDate(JNIEnv*
 // jvalue is the number of milliseconds since January 1, 1970, 00:00:00
 JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendTimestamp(JNIEnv* env, jobject jobj, jlong handler,
                                                                               jlong jvalue) {
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         int64_t seconds = jvalue / 1000;
         // int64_t microsecond = jvalue % 1000;
@@ -317,7 +317,7 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendTimestamp(JN
 
 JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendString(JNIEnv* env, jobject jobj, jlong handler,
                                                                            jstring jvalue) {
-    StarrocksFormatColumn* column = reinterpret_cast<StarrocksFormatColumn*>(handler);
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
         std::string value = jstring_to_cstring(env, jvalue);
         VLOG(10) << " append string :" << value;

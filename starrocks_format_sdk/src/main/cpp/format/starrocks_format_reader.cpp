@@ -37,13 +37,15 @@
 
 namespace starrocks::lake::format {
 
-StarrocksFormatReader::StarrocksFormatReader(int64_t tablet_id, int64_t version,
+StarRocksFormatReader::StarRocksFormatReader(int64_t tablet_id, int64_t version,
                                              std::shared_ptr<TabletSchema>& required_tablet_schema,
+                                             std::shared_ptr<TabletSchema>& output_tablet_schema,
                                              std::string tablet_root_path,
                                              std::unordered_map<std::string, std::string>& options)
         : _tablet_id(tablet_id),
           _version(version),
           _required_tablet_schema(required_tablet_schema),
+          _output_tablet_schema(output_tablet_schema),
           _tablet_root_path(std::move(tablet_root_path)),
           _options(options) {
     auto it = _options.find("starrocks.format.chunk_size");
@@ -54,13 +56,13 @@ StarrocksFormatReader::StarrocksFormatReader(int64_t tablet_id, int64_t version,
     }
 }
 
-Status StarrocksFormatReader::open() {
+Status StarRocksFormatReader::open() {
     LOG(INFO) << " Open tablet reader " << _tablet_id << " version: " << _version << " location: " << _tablet_root_path;
     _state = std::make_shared<RuntimeState>();
 
     // get tablet.
     // support the below file system options, same as hadoop aws fs options
-    // fs.s3a.path.style.access
+    // fs.s3a.path.style.access default false
     // fs.s3a.access.key
     // fs.s3a.secret.key
     // fs.s3a.endpoint
@@ -83,26 +85,15 @@ Status StarrocksFormatReader::open() {
     if (it != _options.end() && !it->second.empty()) {
         using_column_uid = it->second.compare("true") == 0 ? true : false;
     }
-
-    for (int col_idx = 0; col_idx < _required_tablet_schema->num_columns(); col_idx++) {
-        int32_t index = 0;
-        if (using_column_uid) {
-            index = _tablet_schema->field_index(_required_tablet_schema->column(col_idx).unique_id());
-        } else {
-            index = _tablet_schema->field_index(_required_tablet_schema->column(col_idx).name());
-        }
-        if (index < 0) {
-            std::stringstream ss;
-            ss << "invalid field name: " << _required_tablet_schema->column(col_idx).name();
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
-        }
-        LOG(INFO) << "Read column name: " << _tablet_schema->column(index).name() << ", cid "
-                  << _tablet_schema->column(index).unique_id();
-        _required_column_indexs.push_back(index);
+    _need_project_after_filter = _required_tablet_schema->num_columns() != _output_tablet_schema->num_columns();
+    RETURN_IF_ERROR(schema_column_name_to_id(_required_tablet_schema, _required_column_indexs, using_column_uid));
+    if (_need_project_after_filter) {
+        RETURN_IF_ERROR(schema_column_name_to_id(_output_tablet_schema, _output_column_indexs, using_column_uid));
     }
+    _output_schema = starrocks::ChunkHelper::convert_schema(_tablet_schema, _output_column_indexs);
 
     std::vector<uint32_t> scan_column_indexs;
+    std::vector<uint32_t> output_column_indexs;
     for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
         scan_column_indexs.push_back(i);
     }
@@ -111,17 +102,21 @@ Status StarrocksFormatReader::open() {
             scan_column_indexs.push_back(index);
         }
     }
+
     std::sort(scan_column_indexs.begin(), scan_column_indexs.end());
     auto scan_schema = starrocks::ChunkHelper::convert_schema(_tablet_schema, scan_column_indexs);
     ASSIGN_OR_RETURN(_tablet_reader, _tablet->new_reader(std::move(scan_schema)));
+    // chunk must contain key columns.
+    // if required columns already contain key columns. no need add child project node.
+    // if required columns not same as output column. we need project again after filter node
     if (std::equal(scan_column_indexs.begin(), scan_column_indexs.end(), _required_column_indexs.begin(),
                    _required_column_indexs.end())) {
         _prj_iter = _tablet_reader;
     } else {
-        starrocks::Schema output_schema = ChunkHelper::convert_schema(_tablet_schema, _required_column_indexs);
+        starrocks::Schema required_schema = ChunkHelper::convert_schema(_tablet_schema, _required_column_indexs);
         LOG(INFO) << "Create project while OutputSchema and ScanSchema are not same. OutputSchema size is "
                   << _required_column_indexs.size() << " and ScanSchema size is " << scan_column_indexs.size() << ".";
-        _prj_iter = new_projection_iterator(output_schema, _tablet_reader);
+        _prj_iter = new_projection_iterator(required_schema, _tablet_reader);
     }
 
     TabletReaderParams read_params;
@@ -139,13 +134,32 @@ Status StarrocksFormatReader::open() {
     }
 
     RETURN_IF_ERROR(_tablet_reader->prepare());
-    LOG(INFO) << "keys " << read_params.start_key.size() << " " << read_params.end_key.size();
     RETURN_IF_ERROR(_tablet_reader->open(read_params));
 
     return Status::OK();
 }
 
-void StarrocksFormatReader::close() {
+Status StarRocksFormatReader::schema_column_name_to_id(std::shared_ptr<TabletSchema>& tablet_part_schema,
+                                                       std::vector<uint32_t>& column_indexs, bool using_column_uid) {
+    for (int col_idx = 0; col_idx < tablet_part_schema->num_columns(); col_idx++) {
+        int32_t index = 0;
+        if (using_column_uid) {
+            index = _tablet_schema->field_index(tablet_part_schema->column(col_idx).unique_id());
+        } else {
+            index = _tablet_schema->field_index(tablet_part_schema->column(col_idx).name());
+        }
+        if (index < 0) {
+            std::stringstream ss;
+            ss << "invalid field name: " << tablet_part_schema->column(col_idx).name();
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+        column_indexs.push_back(index);
+    }
+    return Status::OK();
+}
+
+void StarRocksFormatReader::close() {
     if (_tablet_reader) {
         // close reader to update statistics before update counters
         _tablet_reader->close();
@@ -159,7 +173,7 @@ void StarrocksFormatReader::close() {
     _predicate_free_pool.clear();
 }
 
-Status StarrocksFormatReader::parse_query_plan(std::string& encoded_query_plan) {
+Status StarRocksFormatReader::parse_query_plan(std::string& encoded_query_plan) {
     std::string query_plan_info;
     if (!base64_decode(encoded_query_plan, &query_plan_info)) {
         LOG(WARNING) << "Open reader error: base64_decode decode query_plan failure";
@@ -225,7 +239,7 @@ Status StarrocksFormatReader::parse_query_plan(std::string& encoded_query_plan) 
     return Status::OK();
 }
 
-Status StarrocksFormatReader::init_reader_params(TabletReaderParams& params) {
+Status StarRocksFormatReader::init_reader_params(TabletReaderParams& params) {
     _conjuncts_manager.conjunct_ctxs_ptr = &_conjunct_ctxs;
     _conjuncts_manager.tuple_desc = _tuple_desc;
     _conjuncts_manager.obj_pool = &_obj_pool;
@@ -299,23 +313,23 @@ Status StarrocksFormatReader::init_reader_params(TabletReaderParams& params) {
     return Status::OK();
 }
 
-StarrocksFormatChunk* StarrocksFormatReader::get_next() {
+StarRocksFormatChunk* StarRocksFormatReader::get_next() {
     auto chunk = ChunkHelper::new_chunk(_prj_iter->output_schema(), _chunk_size);
     Status status = do_get_next(chunk);
 
     if (status.ok()) {
-        StarrocksFormatChunk* format_chunk = new StarrocksFormatChunk(std::move(chunk));
+        StarRocksFormatChunk* format_chunk = new StarRocksFormatChunk(std::move(chunk));
         return format_chunk;
     } else if (status.is_end_of_file()) {
         LOG(INFO) << "no more data in tablet " << _tablet_id;
-        StarrocksFormatChunk* format_chunk = new StarrocksFormatChunk(_required_tablet_schema, 0);
+        StarRocksFormatChunk* format_chunk = new StarRocksFormatChunk(_output_tablet_schema, 0);
         return format_chunk;
     } else {
         LOG(ERROR) << "get_next failed! " << status.message();
         return nullptr;
     }
 }
-Status StarrocksFormatReader::do_get_next(ChunkUniquePtr& chunk_ptr) {
+Status StarRocksFormatReader::do_get_next(ChunkUniquePtr& chunk_ptr) {
     if (!chunk_ptr) {
         chunk_ptr = ChunkHelper::new_chunk(_prj_iter->output_schema(), _chunk_size);
     }
@@ -343,8 +357,21 @@ Status StarrocksFormatReader::do_get_next(ChunkUniquePtr& chunk_ptr) {
             auto status = ExecNode::eval_conjuncts(_not_push_down_conjuncts, chunk);
             DCHECK_CHUNK(chunk);
         }
+        if (_need_project_after_filter) {
+            ChunkUniquePtr output_chunk_ptr = ChunkHelper::new_chunk(_output_schema, _chunk_size);
+            auto* output_chunk = output_chunk_ptr.get();
+            // If there is no filter, _query_slots will be empty.
+            for (auto col : _output_tablet_schema->columns()) {
+                output_chunk->get_column_by_name(std::string(col.name()))
+                        ->append(*(chunk->get_column_by_name(std::string(col.name())).get()));
+            }
+            chunk_ptr->swap_chunk(*output_chunk_ptr);
+            LOG(INFO) << "chunk will return " << chunk_ptr->num_columns()
+                      << ", size _output_column_indexs: " << _output_column_indexs.size() << std::endl;
+            DCHECK_CHUNK(chunk);
+        }
     } while (chunk->num_rows() == 0);
-
+    DCHECK(chunk_ptr->num_columns() == _output_column_indexs.size());
     return Status::OK();
 }
 
