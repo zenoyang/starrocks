@@ -68,6 +68,7 @@ public:
               _name(rhs._name),
               _type(rhs._type),
               _sub_fields(rhs._sub_fields ? new Buffer<Field>(*rhs._sub_fields) : nullptr),
+              _length(rhs._length),
               _short_key_length(rhs._short_key_length),
               _flags(rhs._flags),
               _uid(rhs._uid) {}
@@ -78,6 +79,7 @@ public:
               _name(std::move(rhs._name)),
               _type(std::move(rhs._type)),
               _sub_fields(rhs._sub_fields),
+              _length(rhs._length),
               _short_key_length(rhs._short_key_length),
               _flags(rhs._flags),
               _uid(rhs._uid) {
@@ -91,6 +93,7 @@ public:
             _name = rhs._name;
             _type = rhs._type;
             _agg_method = rhs._agg_method;
+            _length = rhs._length,
             _short_key_length = rhs._short_key_length;
             _flags = rhs._flags;
             _sub_fields = rhs._sub_fields ? new Buffer<Field>(*rhs._sub_fields) : nullptr;
@@ -105,6 +108,7 @@ public:
             _name = std::move(rhs._name);
             _type = std::move(rhs._type);
             _agg_method = rhs._agg_method;
+            _length = rhs._length,
             _short_key_length = rhs._short_key_length;
             _flags = rhs._flags;
             _uid = rhs._uid;
