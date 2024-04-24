@@ -28,7 +28,7 @@ jobs:
 
 
   starrocks_format_sdk:
-    image:  hub.byted.org/compile/emr-starrocks-lh-3.2-builder:a34aa9858eee6be10bdebc5dfad3a04c
+    image:  hub.byted.org/compile/emr-starrocks-lh-3.2-builder:e5e4770c45e7dde16c46769503a2ebc1
     working-directory: emr-core/StarRocks
     runs-on:
       spec: m1.8xlarge
