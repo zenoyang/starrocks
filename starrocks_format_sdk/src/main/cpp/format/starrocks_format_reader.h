@@ -42,42 +42,44 @@ public:
     Status open();
     void close();
 
-    Status parse_query_plan(std::string& encoded_query_plan);
-    Status init_reader_params(TabletReaderParams& params);
-
     StarRocksFormatChunk* get_next();
     Status do_get_next(ChunkUniquePtr& chunk_ptr);
 
 private:
-    bool need_project_after_filter();
-    Status schema_column_name_to_id(std::shared_ptr<TabletSchema>& tablet_schema, std::vector<uint32_t>& column_indexs,
-                                    bool using_column_uid);
+    Status parse_query_plan(std::string& encoded_query_plan);
+    Status init_reader_params(TabletReaderParams& params);
+    Status build_output_index_map(const std::shared_ptr<starrocks::Schema>& output,
+                                  const std::shared_ptr<starrocks::Schema>& input);
+    Status schema_to_column_index(std::shared_ptr<TabletSchema>& tablet_schema, std::vector<uint32_t>& column_indexs,
+                                  bool using_column_uid);
 
 private:
     int64_t _tablet_id;
     int64_t _version;
     std::shared_ptr<TabletSchema> _required_tablet_schema;
     std::shared_ptr<TabletSchema> _output_tablet_schema;
-    starrocks::Schema _output_schema;
     std::string _tablet_root_path;
     std::unordered_map<std::string, std::string> _options;
 
     int32_t _chunk_size;
+    std::shared_ptr<TabletSchema> _tablet_schema;
     std::unique_ptr<VersionedTablet> _tablet;
     std::shared_ptr<TabletReader> _tablet_reader;
-    // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
-    std::shared_ptr<ChunkIterator> _prj_iter;
-    std::shared_ptr<ChunkIterator> _output_iter;
-    std::shared_ptr<RuntimeState> _state;
 
-    //
-    std::shared_ptr<TabletSchema> _tablet_schema;
-    // starrocks::Schema _required_schema;
+    // internal tablet reader schema
+    std::vector<uint32_t> _scan_column_indexs;
     std::unordered_set<uint32_t> _unused_output_column_ids;
-    std::vector<uint32_t> _required_column_indexs;
-    std::vector<uint32_t> _output_column_indexs;
+    std::shared_ptr<starrocks::Schema> _scan_schema;
+    std::shared_ptr<Chunk> _scan_chunk;
+    // format reader output schema
+    std::shared_ptr<starrocks::Schema> _output_schema;
+    // mapping from index of column in output chunk to index of column in input chunk.
+    std::vector<size_t> _index_map;
+    // need choose select columns when scan schema are not same as output schema
+    bool _need_project = false;
 
-    //
+    // filter pushdown use the vars
+    std::shared_ptr<RuntimeState> _state;
     ObjectPool _obj_pool;
     // _desc_tbl, tuple_desc,  _query_slots, _conjunct_ctxs memory are maintained by _obj_pool
     DescriptorTbl* _desc_tbl = nullptr;
@@ -90,14 +92,12 @@ private:
     OlapScanConjunctsManager _conjuncts_manager;
     using PredicatePtr = std::unique_ptr<ColumnPredicate>;
     // The conjuncts couldn't push down to storage engine
-    // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
     ConjunctivePredicates _not_push_down_predicates;
     std::vector<PredicatePtr> _predicate_free_pool;
     std::vector<uint8_t> _selection;
 
-    // need choose select columns after filter
-    bool _need_project_after_filter = false;
+
 };
 
 } // namespace starrocks::lake::format

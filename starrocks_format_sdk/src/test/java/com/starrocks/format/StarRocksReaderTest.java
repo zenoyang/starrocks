@@ -194,20 +194,25 @@ public class StarRocksReaderTest extends BaseFormatTest {
         assertEquals(expectedTotalRows, totalRows);
     }
 
-    @Ignore
-    public void testReadWithFilterProject() throws Exception {
-        String tableName = "tb_all_primitivetype_read_two_key_unique";
-        long version = 3;
-        long expectedTotalRows = 2;
-        String sql = "select c_date, c_datetime from tb_all_primitivetype_read_two_key_unique where c_smallint = 30";
-        Set<String> requiredColumnName = new HashSet<>(Arrays.asList("c_date", "c_datetime", "c_smallint"));
-        Set<String> outputColumnName = new HashSet<>(Arrays.asList("c_date", "c_datetime"));
 
+
+    private static Stream<Arguments> testReadWithFilterProject() {
+        return Stream.of(
+                Arguments.of("tb_all_primitivetype_read_two_key_unique", 3, 1, "rowid,c_date,c_datetime,c_smallint",  "rowid,c_date,c_datetime", "select rowId, c_date, c_datetime from demo.tb_all_primitivetype_read_two_key_unique where c_smallint = 30")
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    public void testReadWithFilterProject(String tableName, long version, long expectedTotalRows, String requiredColumns, String outputColumns, String sql) throws Exception {
         TabletSchemaPB tabletAllSchema = toPbTabletSchema(restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName));
         List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
         assertFalse(partitions.isEmpty());
 
-        String queryPlan = restClient.getQueryPlan(DB_NAME, tableName, sql).toString();
+        String queryPlan = restClient.getQueryPlan(DB_NAME, tableName, sql).getOpaquedQueryPlan();
+
+        Set<String> requiredColumnName = new HashSet<>(Arrays.asList(requiredColumns.split(",")));
+        Set<String> outputColumnName = new HashSet<>(Arrays.asList(outputColumns.split(",")));
 
         TabletSchemaPB.Builder builder = tabletAllSchema.toBuilder().clearColumn();
         List<TabletSchema.ColumnPB> pbColumns = tabletAllSchema.getColumnList().stream()
@@ -216,7 +221,6 @@ public class StarRocksReaderTest extends BaseFormatTest {
 
         builder.addAllColumn(pbColumns);
         TabletSchemaPB requiredSchema = builder.build();
-
 
         pbColumns = tabletAllSchema.getColumnList().stream()
                 .filter(col -> outputColumnName.contains(col.getName().toLowerCase()))
@@ -272,9 +276,26 @@ public class StarRocksReaderTest extends BaseFormatTest {
         long version = 3;
         String tableName = "tb_all_primitivetype_read_unique";
 
-        TabletSchemaPB tabletSchema = toPbTabletSchema(restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName));
+        Set<String> requiredColumnName = new HashSet<>(Arrays.asList("c_tinyint", "c_smallint"));
+        Set<String> outputColumnName = new HashSet<>(Arrays.asList("c_tinyint", "c_date"));
+
+        TabletSchemaPB tabletAllSchema = toPbTabletSchema(restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName));
         List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
         assertFalse(partitions.isEmpty());
+
+        TabletSchemaPB.Builder builder = tabletAllSchema.toBuilder().clearColumn();
+        List<TabletSchema.ColumnPB> pbColumns = tabletAllSchema.getColumnList().stream()
+                .filter(col -> requiredColumnName.contains(col.getName().toLowerCase()))
+                .collect(Collectors.toList());
+
+        builder.addAllColumn(pbColumns);
+        TabletSchemaPB requiredSchema = builder.build();
+
+        pbColumns = tabletAllSchema.getColumnList().stream()
+                .filter(col -> outputColumnName.contains(col.getName().toLowerCase()))
+                .collect(Collectors.toList());
+
+        TabletSchemaPB outputSchema = builder.clearColumn().addAllColumn(pbColumns).build();
 
         // read chunk
         for (TablePartition partition : partitions) {
@@ -287,12 +308,12 @@ public class StarRocksReaderTest extends BaseFormatTest {
                         "DAABDAACDwABDAAAAAIIAAEAAAABCAACAAAAHAgAAwAAAAEKAAT//////////w8ABQgAAAABAAAAAQ8ABgIAAAABAAIACAACADMBDAA1DQABCAwAAAABAAAAAw8AAQwAAAABCAABAAAAEAwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAAAMAAAAIAAQAAAAADAAPCAABAAAAAwgAAgAAAAAACAAU/////wgAF/////8CADMAAgA0AQIANgEAAAAOADkIAAAAAAIAOwAACAABAAAAAAgAAgAAACAIAAMAAAAACgAE//////////8PAAUIAAAAAQAAAAAPAAYCAAAAAQAPAAcMAAAAAQ8AAQwAAAADCAABAAAAAgwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAAAIAAAAIAAMAAAANCAAEAAAAAggAFP////8IABkAAAAACAAcAAAABQIAMwECADQBAgA2AQAIAAEAAAAQDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAABQAAAAgABAAAAAAMAA8IAAEAAAABCAACAAAAAAAIABT/////CAAX/////wIAMwACADQBAgA2AQAIAAEAAAAJDAACDwABDAAAAAEIAAEAAAAADAACCAABAAAABQAAAAgABAAAAAAMAAoKAAEAAAAAAAAAAQAIABT/////AgAzAAIANAACADYBAAACAAgAAgAzAQ4AOQgAAAAAAgA7AAwAPwgAAQAAAAAPAAILAAAAAQAAAAVyb3dJZA8AAwgAAAABAAAABQIABAALAAYAAAAgdGJfYWxsX3ByaW1pdGl2ZXR5cGVfcmVhZF91bmlxdWULAAcAAAAMMTogcm93SWQgPiAxAgAIAQ0ACQgIAAAAAA8ACgsAAAAADwALCwAAAAEAAAAFcm93SWQAAAAPAAQMAAAAAQ8AAQwAAAABCAABAAAAEAwAAg8AAQwAAAABCAABAAAAAAwAAggAAQAAAAMAAAAIAAQAAAAADAAPCAABAAAAAwgAAgAAAAEACAAU/////wgAF/////8CADMAAgA0AQIANgEAAAwABQgAAQAAAAYMAAgAAAwABggAAQAAAAEPAAIMAAAAAAAADQACCgwAAAADAAAAAAAAJ4EKAAEAAAAAAAAngQoAAgAAAAAAAAADCgADAAAAAAAAAAAIAAQVj2d0AAAAAAAAACeCCgABAAAAAAAAJ4IKAAIAAAAAAAAAAwoAAwAAAAAAAAAACAAEFY9ndAAAAAAAAAAngwoAAQAAAAAAACeDCgACAAAAAAAAAAMKAAMAAAAAAAAAAAgABBWPZ3QADAADDwABDAAAAAMIAAEAAAABCAACAAAAAAwAAw8AAQwAAAABCAABAAAAAAwAAggAAQAAAAUAAAAIAAT/////CAAF/////wgABv////8IAAcAAAABCwAIAAAABXJvd0lkCAAJ/////wIACgECAAsAAAgAAQAAAAMIAAIAAAAADAADDwABDAAAAAEIAAEAAAAADAACCAABAAAAAwAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAJY190aW55aW50CAAJ/////wIACgECAAsAAAgAAQAAAAMIAAIAAAABDAADDwABDAAAAAEIAAEAAAAADAACCAABAAAAAwAAAAgABP////8IAAX/////CAAG/////wgABwAAAAELAAgAAAAACAAJ/////wIACgECAAsAAA8AAgwAAAACCAABAAAAAAgAAv////8IAAP/////CgAEAAAAAAAAJ38IAAX/////AAgAAQAAAAEIAAL/////CAAD/////wgABf////8ADwADDAAAAAEKAAEAAAAAAAAnfwgAAgAAAAEIAAMAAAAQCAAEAAAAAAsABwAAACB0Yl9hbGxfcHJpbWl0aXZldHlwZV9yZWFkX3VuaXF1ZQsACAAAAAAMAAsLAAEAAAAgdGJfYWxsX3ByaW1pdGl2ZXR5cGVfcmVhZF91bmlxdWUAAAAMAAQKAAE1nvOblRtOsgoAArkhOKh0CF2IAAA=");
                 // read table
                 StarRocksReader reader =
-                        new StarRocksReader(tabletId, version, tabletSchema, tabletSchema, partition.getStoragePath(), options);
+                        new StarRocksReader(tabletId, version, requiredSchema, outputSchema, partition.getStoragePath(), options);
                 try {
                     reader.open();
                     fail();
                 } catch (Exception e) {
-                    assertTrue(e.getMessage().contains("is not same as column size in tablet reader"));
+                    assertTrue(e.getMessage().contains("is not in scan column list"));
                 }
                 reader.close();
                 reader.release();
