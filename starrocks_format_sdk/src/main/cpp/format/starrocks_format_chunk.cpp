@@ -28,8 +28,8 @@ StarRocksFormatChunk::StarRocksFormatChunk(ChunkUniquePtr chunk) : _chunk(std::m
     resolve_columns(_chunk);
 }
 
-StarRocksFormatChunk::StarRocksFormatChunk(std::shared_ptr<TabletSchema> tablet_schema, size_t capacity) {
-    _chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(tablet_schema), capacity);
+StarRocksFormatChunk::StarRocksFormatChunk(std::shared_ptr<starrocks::Schema> schema, size_t capacity) {
+    _chunk = ChunkHelper::new_chunk(*schema, capacity);
     resolve_columns(_chunk);
 }
 

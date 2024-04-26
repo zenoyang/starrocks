@@ -407,7 +407,7 @@ public class StarRocksReaderTest extends BaseFormatTest {
 
                 try {
                     Map<String, String> options = settings.toMap();
-                    options.put(STARROCKS_FORMAT_USING_COLUMN_UID, "true");
+                    options.put(STARROCKS_FORMAT_USING_COLUMN_UID, "false");
 
                     StarRocksReader reader =
                             new StarRocksReader(tabletId, version, pbSchema, pbSchema, partition.getStoragePath(), options);

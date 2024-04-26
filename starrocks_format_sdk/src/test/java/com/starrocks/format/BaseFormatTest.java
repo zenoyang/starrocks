@@ -63,7 +63,6 @@ public class BaseFormatTest {
         for (int i = 0; i < indexMeta.getColumns().size(); i++) {
             Column column = indexMeta.getColumns().get(i);
             // FIXME use uniqueId
-            column.setUniqueId(i);
             builder.addColumn(toPbColumn(column));
         }
 

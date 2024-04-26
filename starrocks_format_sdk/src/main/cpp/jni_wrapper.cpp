@@ -140,7 +140,12 @@ JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksWriter_destroyNativeW
 
 JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksWriter_nativeOpen(JNIEnv* env, jobject jobj, jlong handler) {
     StarRocksFormatWriter* tablet_writer = reinterpret_cast<StarRocksFormatWriter*>(handler);
-    SAFE_CALL_WRITER_FUNCATION(tablet_writer, { tablet_writer->open(); });
+    SAFE_CALL_WRITER_FUNCATION(tablet_writer, {
+        Status st = tablet_writer->open();
+        if (!st.ok()) {
+            env->ThrowNew(kRuntimeExceptionClass, st.message().get_data());
+        }
+    });
     return 0;
 }
 

@@ -20,6 +20,7 @@ package com.starrocks.format;
 import com.starrocks.format.rest.TransactionResult;
 import com.starrocks.format.rest.model.TablePartition;
 import com.starrocks.format.rest.model.TabletCommitInfo;
+import com.starrocks.proto.LakeTypes;
 import com.starrocks.proto.TabletSchema.ColumnPB;
 import com.starrocks.proto.TabletSchema.KeysType;
 import com.starrocks.proto.TabletSchema.TabletSchemaPB;
@@ -33,6 +34,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
@@ -188,12 +190,27 @@ public class StarRocksWriterTest extends BaseFormatTest {
 
         long tabletId = 100L;
         long txnId = 4;
+        long version = 1;
 
         String tabletRootPath = tempDir.toAbsolutePath().toString();
         File dir = new File(tabletRootPath + "/data");
         assertTrue(dir.mkdirs());
         dir = new File(tabletRootPath + "/log");
         assertTrue(dir.mkdirs());
+        dir = new File(tabletRootPath + "/meta");
+        assertTrue(dir.mkdirs());
+
+        LakeTypes.TabletMetadataPB metadata = LakeTypes.TabletMetadataPB.newBuilder()
+                .setSchema(schema).build();
+
+        FileOutputStream out = new FileOutputStream(new File(dir, String.format("%016x_%016x.meta", tabletId, version)));
+        metadata.writeTo(out);
+        out.close();
+
+        out = new FileOutputStream(new File(dir, String.format("%016x_%016x.meta", tabletId, version + 1)));
+        metadata.writeTo(out);
+        out.close();
+
         StarRocksWriter writer = new StarRocksWriter(tabletId,
                 schema,
                 txnId,
@@ -255,6 +272,15 @@ public class StarRocksWriterTest extends BaseFormatTest {
             assertTrue(dir.mkdirs());
             dir = new File(tabletRootPath + "/log");
             assertTrue(dir.mkdirs());
+            dir = new File(tabletRootPath + "/meta");
+            assertTrue(dir.mkdirs());
+
+            LakeTypes.TabletMetadataPB metadata = LakeTypes.TabletMetadataPB.newBuilder()
+                    .setSchema(schema).build();
+            FileOutputStream out = new FileOutputStream(new File(dir, String.format("%016x_%016x.meta", tabletId, 1)));
+            metadata.writeTo(out);
+            out.close();
+
             StarRocksWriter writer = new StarRocksWriter(tabletId,
                     schema,
                     txnId,

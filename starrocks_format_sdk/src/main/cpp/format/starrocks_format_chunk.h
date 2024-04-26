@@ -65,7 +65,7 @@ private:
 class StarRocksFormatChunk {
 public:
     StarRocksFormatChunk(ChunkUniquePtr chunk);
-    StarRocksFormatChunk(std::shared_ptr<TabletSchema> tablet_schema, size_t capacity);
+    StarRocksFormatChunk(std::shared_ptr<starrocks::Schema> schema, size_t capacity);
 
     StarRocksFormatChunk(StarRocksFormatChunk&&) = default;
     StarRocksFormatChunk& operator=(StarRocksFormatChunk&&) = default;

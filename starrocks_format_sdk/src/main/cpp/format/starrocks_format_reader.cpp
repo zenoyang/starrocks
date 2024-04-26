@@ -161,16 +161,21 @@ Status StarRocksFormatReader::build_output_index_map(const std::shared_ptr<starr
 
 Status StarRocksFormatReader::schema_to_column_index(std::shared_ptr<TabletSchema>& tablet_part_schema,
                                                      std::vector<uint32_t>& column_indexs, bool using_column_uid) {
+    std::stringstream ss;
     for (int col_idx = 0; col_idx < tablet_part_schema->num_columns(); col_idx++) {
         int32_t index = 0;
         if (using_column_uid) {
             index = _tablet_schema->field_index(tablet_part_schema->column(col_idx).unique_id());
+            if (index < 0) {
+                ss << "invalid field unique id: " << tablet_part_schema->column(col_idx).unique_id();
+            }
         } else {
             index = _tablet_schema->field_index(tablet_part_schema->column(col_idx).name());
+            if (index < 0) {
+                ss << "invalid field name: " << tablet_part_schema->column(col_idx).name();
+            }
         }
         if (index < 0) {
-            std::stringstream ss;
-            ss << "invalid field name: " << tablet_part_schema->column(col_idx).name();
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
@@ -334,7 +339,7 @@ StarRocksFormatChunk* StarRocksFormatReader::get_next() {
         return format_chunk;
     } else if (status.is_end_of_file()) {
         LOG(INFO) << "no more data in tablet " << _tablet_id;
-        StarRocksFormatChunk* format_chunk = new StarRocksFormatChunk(_output_tablet_schema, 0);
+        StarRocksFormatChunk* format_chunk = new StarRocksFormatChunk(_output_schema, 0);
         return format_chunk;
     } else {
         LOG(ERROR) << "get_next failed! " << status.message();

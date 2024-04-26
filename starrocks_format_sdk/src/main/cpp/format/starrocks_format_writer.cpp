@@ -22,6 +22,7 @@
 #include "format_utils.h"
 #include "starrocks_format/starrocks_lib.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/protobuf_file.h"
@@ -39,7 +40,6 @@ StarRocksFormatWriter::StarRocksFormatWriter(int64_t tablet_id, std::shared_ptr<
           _options(options) {
 
     _provider = std::make_shared<FixedLocationProvider>(tablet_root_path);
-    _tablet = std::make_unique<Tablet>(_lake_tablet_manager, _tablet_id, _provider, _tablet_schema);
 
     _writer_type = WriterType::kHorizontal;
     auto it = _options.find("starrocks.format.writer_type");
@@ -53,7 +53,6 @@ StarRocksFormatWriter::StarRocksFormatWriter(int64_t tablet_id, std::shared_ptr<
 
 Status StarRocksFormatWriter::open() {
     if (!_tablet_writer) {
-        ASSIGN_OR_RETURN(_tablet_writer, _tablet->new_writer(_writer_type, _txn_id, _max_rows_per_segment));
         // support the below file system options, same as hadoop aws fs options
         // fs.s3a.path.style.access
         // fs.s3a.access.key
@@ -65,6 +64,12 @@ Status StarRocksFormatWriter::open() {
         // fs.s3a.retry.interval
         auto fs_options = filter_map_by_key_prefix(_options, "fs.");
         ASSIGN_OR_RETURN(auto fs, FileSystem::Create(_tablet_root_path, FSOptions(fs_options)));
+        // get tablet schema;
+        ASSIGN_OR_RETURN(auto metadata, get_tablet_metadata(fs));
+        _tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
+        _tablet = std::make_unique<Tablet>(_lake_tablet_manager, _tablet_id, _provider, _tablet_schema);
+        // create tablet writer
+        ASSIGN_OR_RETURN(_tablet_writer, _tablet->new_writer(_writer_type, _txn_id, _max_rows_per_segment));
         _tablet_writer->set_fs(fs);
         _tablet_writer->set_location_provider(_provider);
     }
@@ -92,7 +97,8 @@ Status StarRocksFormatWriter::finish() {
 }
 
 StarRocksFormatChunk* StarRocksFormatWriter::new_chunk(size_t capacity) {
-    StarRocksFormatChunk* format_chunk = new StarRocksFormatChunk(_tablet_schema, capacity);
+    auto schema = std::make_shared<starrocks::Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    StarRocksFormatChunk* format_chunk = new StarRocksFormatChunk(schema, capacity);
     return format_chunk;
 }
 
@@ -133,4 +139,27 @@ Status StarRocksFormatWriter::put_txn_log(const TxnLogPtr& log) {
 
     return Status::OK();
 }
+
+StatusOr<TabletMetadataPtr> StarRocksFormatWriter::get_tablet_metadata(std::shared_ptr<FileSystem> fs) {
+    std::vector<std::string> objects{};
+    // TODO: construct prefix in LocationProvider
+    std::string prefix = fmt::format("{:016X}_", _tablet_id);
+    auto root = _provider->metadata_root_location(_tablet_id);
+
+    auto scan_cb = [&](std::string_view name) {
+        if (HasPrefixString(name, prefix)) {
+            objects.emplace_back(join_path(root, name));
+        }
+        return true;
+    };
+    RETURN_IF_ERROR(fs->iterate_dir(root, scan_cb));
+
+    if (objects.size() == 0) {
+        return Status::NotFound(fmt::format("tablet {} metadata not found", _tablet_id));
+    }
+    std::sort(objects.begin(), objects.end());
+    auto metadata_location = objects.back();
+    return _lake_tablet_manager->get_tablet_metadata(fs, metadata_location, true);
+}
+
 } // namespace starrocks::lake

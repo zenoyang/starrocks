@@ -56,6 +56,7 @@ public:
 
 private:
     Status put_txn_log(const TxnLogPtr& log);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(std::shared_ptr<FileSystem> fs);
 
 private:
     int64_t _tablet_id;
