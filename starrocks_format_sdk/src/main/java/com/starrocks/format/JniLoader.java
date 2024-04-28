@@ -17,6 +17,9 @@
 
 package com.starrocks.format;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -26,17 +29,18 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 
 public class JniLoader {
+    private static final Logger LOG = LoggerFactory.getLogger(JniLoader.class);
     public static final String KEY_STARROCKS_FORMAT_JNI_LIB_PATH = "com.starrocks.format.jni.lib.path";
     public static final String KEY_STARROCKS_FORMAT_JNI_LIB_NAME = "com.starrocks.format.jni.lib.name";
     public static final String KEY_STARROCKS_FORMAT_JNI_WRAPPER_NAME = "com.starrocks.format.jni.wrapper.name";
 
-    private static boolean isLoaded = false;
+    private static volatile boolean isLoaded = false;
 
     public static synchronized void loadNativeLibrary(String version) {
         if (isLoaded) {
             return;
         }
-
+        LOG.info("begin load native StarRocks format library.");
         try {
             // load libstarrocks_format.so
             String nativeLibName = System.getProperty(KEY_STARROCKS_FORMAT_JNI_LIB_NAME);
@@ -58,6 +62,7 @@ public class JniLoader {
         } catch (Exception e) {
             throw e;
         }
+        LOG.info("finished load native StarRocks format library.");
         isLoaded = true;
     }
 
@@ -68,6 +73,7 @@ public class JniLoader {
         if (jniNativeLibraryPath != null) {
             File nativeLib = new File(jniNativeLibraryPath, nativeLibName);
             if (nativeLib.exists()) {
+                LOG.info("Found native StarRocks format library: " + nativeLib.toPath());
                 return nativeLib;
             }
         }
@@ -91,6 +97,8 @@ public class JniLoader {
         String extractedLibFileName = String.format("%s-%s", libraryFileName, libraryVersion);
         File extractedLibFile = new File(targetFolder, extractedLibFileName);
         if (extractedLibFile.exists()) {
+            LOG.info("Found native StarRocks format library: " + extractedLibFile.toPath());
+            System.out.println("Found the " + extractedLibFile);
             return extractedLibFile;
         }
 
@@ -121,6 +129,7 @@ public class JniLoader {
                     throw new RuntimeException(String.format("Failed to write a native library file at %s", extractedLibFile));
                 }
             }
+            LOG.info("Successfully decomppress native StarRocks format library: " + extractedLibFile.toPath());
             return new File(targetFolder, extractedLibFileName);
         } catch (IOException e) {
             throw new RuntimeException("extract " + extractedLibFileName + " failed!", e);
