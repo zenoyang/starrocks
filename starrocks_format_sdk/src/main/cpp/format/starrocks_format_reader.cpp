@@ -186,6 +186,13 @@ Status StarRocksFormatReader::schema_to_column_index(std::shared_ptr<TabletSchem
 
 void StarRocksFormatReader::close() {
     if (_tablet_reader) {
+        // log statistics
+        LOG(INFO) << "Close tablet reader with "
+                  << " bytes_read: " << _tablet_reader->stats().bytes_read
+                  << ", compressed_bytes_read_request: " << _tablet_reader->stats().compressed_bytes_read_request
+                  << ", io_count_request: " << _tablet_reader->stats().io_count_request
+                  << ", late_materialize_ns: " << _tablet_reader->stats().late_materialize_ns
+                  << ", io_ns : " << _tablet_reader->stats().io_ns;
         // close reader to update statistics before update counters
         _tablet_reader->close();
     }
