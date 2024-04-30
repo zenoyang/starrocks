@@ -31,7 +31,7 @@
 namespace starrocks::lake::format {
 
 StarRocksFormatWriter::StarRocksFormatWriter(int64_t tablet_id, std::shared_ptr<TabletSchema>& tablet_schema,
-                                             int64_t txn_id, std::string& tablet_root_path,
+                                             int64_t txn_id, std::string tablet_root_path,
                                              std::unordered_map<std::string, std::string>& options)
         : _tablet_id(tablet_id),
           _tablet_schema(tablet_schema),

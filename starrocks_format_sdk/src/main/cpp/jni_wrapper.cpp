@@ -126,7 +126,7 @@ JNIEXPORT jlong JNICALL Java_com_starrocks_format_StarRocksWriter_createNativeWr
     std::unordered_map<std::string, std::string> options = jhashmap_to_cmap(env, joptions);
 
     StarRocksFormatWriter* format_writer =
-            new StarRocksFormatWriter(tablet_id, tablet_schema, txn_id, table_root_path, options);
+            new StarRocksFormatWriter(tablet_id, tablet_schema, txn_id, std::move(table_root_path), options);
 
     return reinterpret_cast<int64_t>(format_writer);
 }

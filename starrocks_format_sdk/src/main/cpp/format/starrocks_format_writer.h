@@ -30,7 +30,7 @@ class StarRocksFormatWriter {
 public:
     StarRocksFormatWriter() = default;
     StarRocksFormatWriter(int64_t tablet_id, std::shared_ptr<TabletSchema>& tablet_schema, int64_t txn_id,
-                          std::string& tablet_root_path, std::unordered_map<std::string, std::string>& options);
+                          std::string tablet_root_path, std::unordered_map<std::string, std::string>& options);
 
     StarRocksFormatWriter(StarRocksFormatWriter&&) = default;
     StarRocksFormatWriter& operator=(StarRocksFormatWriter&&) = default;
