@@ -41,6 +41,7 @@ public class JniLoader {
             return;
         }
         LOG.info("begin load native StarRocks format library.");
+        long start = System.currentTimeMillis();
         try {
             // load libstarrocks_format.so
             String nativeLibName = System.getProperty(KEY_STARROCKS_FORMAT_JNI_LIB_NAME);
@@ -62,7 +63,8 @@ public class JniLoader {
         } catch (Exception e) {
             throw e;
         }
-        LOG.info("finished load native StarRocks format library.");
+        long time = System.currentTimeMillis() - start;
+        LOG.info("finished load native StarRocks format library. taken " + time + " ms");
         isLoaded = true;
     }
 
@@ -98,7 +100,6 @@ public class JniLoader {
         File extractedLibFile = new File(targetFolder, extractedLibFileName);
         if (extractedLibFile.exists()) {
             LOG.info("Found native StarRocks format library: " + extractedLibFile.toPath());
-            System.out.println("Found the " + extractedLibFile);
             return extractedLibFile;
         }
 
