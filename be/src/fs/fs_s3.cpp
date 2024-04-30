@@ -504,7 +504,17 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
     }
     auto client = new_s3client(uri, _options);
-    auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    int64_t read_ahead_size = 64 * 1024; // default value is 64KB
+    auto it = _options._fs_options.find("fs.s3a.readahead.range");
+    if (it != _options._fs_options.end() && !it->second.empty()) {
+        try {
+            read_ahead_size = std::stoi(it->second);
+        } catch (std::logic_error const&) {
+            LOG(WARNING) << " Can not convert config fs.s3a.readahead.range's value to int : " << it->second;
+        }
+    }
+    auto input_stream =
+            std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key(), read_ahead_size);
     return std::make_unique<RandomAccessFile>(std::move(input_stream), path);
 }
 
@@ -515,7 +525,17 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", file_info.path));
     }
     auto client = new_s3client(uri, _options);
-    auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    int64_t read_ahead_size = 64 * 1024; // default value is 64KB
+    auto it = _options._fs_options.find("fs.s3a.readahead.range");
+    if (it != _options._fs_options.end() && !it->second.empty()) {
+        try {
+            read_ahead_size = std::stoi(it->second);
+        } catch (std::logic_error const&) {
+            LOG(WARNING)  << " Can not convert config fs.s3a.readahead.range's value to int : " << it->second;
+        }
+    }
+    auto input_stream =
+            std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key(), read_ahead_size);
     if (file_info.size.has_value()) {
         input_stream->set_size(file_info.size.value());
     }
@@ -530,7 +550,17 @@ StatusOr<std::unique_ptr<SequentialFile>> S3FileSystem::new_sequential_file(cons
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
     }
     auto client = new_s3client(uri, _options);
-    auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    int64_t read_ahead_size = 64 * 1024; // default value is 64KB
+    auto it = _options._fs_options.find("fs.s3a.readahead.range");
+    if (it != _options._fs_options.end() && !it->second.empty()) {
+        try {
+            read_ahead_size = std::stoi(it->second);
+        } catch (std::logic_error const&) {
+            LOG(WARNING) << " Can not convert config fs.s3a.readahead.range's value to int : " << it->second;
+        }
+    }
+    auto input_stream =
+            std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key(), read_ahead_size);
     return std::make_unique<SequentialFile>(std::move(input_stream), path);
 }
 
