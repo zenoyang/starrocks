@@ -24,7 +24,7 @@ BadStatusOrAccess::BadStatusOrAccess(starrocks::Status status) : status_(std::mo
 
 BadStatusOrAccess::~BadStatusOrAccess() = default;
 const char* BadStatusOrAccess::what() const noexcept {
-    return "Bad StatusOr access";
+    return status_.message().to_string().c_str();
 }
 
 const starrocks::Status& BadStatusOrAccess::status() const {
