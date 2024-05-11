@@ -78,13 +78,23 @@ void StarRocksFormatColumn::append_decimal(std::vector<uint8_t>& value) {
 }
 
 Status StarRocksFormatColumn::append_string(std::string& value) {
-    if (value.size() > _field->length()) {
-        return Status::InvalidArgument(
-                fmt::format("string length({}) > limit({}), string: {}", value.size(), _field->length(), value));
+    if (_field->type()->type() == LogicalType::TYPE_JSON) {
+        using ColumnType = RunTimeColumnType<LogicalType::TYPE_JSON>;
+        auto result = JsonValue::parse(value);
+        if (!result.ok()) {
+            std::string error_msg = fmt::format("Failed to parse json: {}", result.status().message());
+            LOG(WARNING) << error_msg;
+            throw std::runtime_error(error_msg);
+        }
+        JsonValue json = std::move(result).value();
+        _column->append_datum(Datum(&json));
+    } else {
+        if (value.size() > _field->length()) {
+            return Status::InvalidArgument(
+                    fmt::format("string length({}) > limit({}), string: {}", value.size(), _field->length(), value));
+        }
+        _column->append_datum(Datum(Slice(value)));
     }
-    Datum dt;
-    datum_from_string(get_type_info(LogicalType::TYPE_VARCHAR).get(), &dt, value, nullptr);
-    _column->append_datum(Datum(dt));
     return Status::OK();
 }
 
@@ -165,8 +175,29 @@ RunTimeCppType<type> StarRocksFormatColumn::get_fixlength_column_value(size_t in
 
 std::string StarRocksFormatColumn::get_string(size_t index) {
     auto* data_column = ColumnHelper::get_data_column(_column);
-    Slice slice = down_cast<const BinaryColumn*>(data_column)->get_slice(index);
-    return slice.to_string();
+    switch (_field->type()->type()) {
+    case LogicalType::TYPE_CHAR:
+    case LogicalType::TYPE_VARCHAR: {
+        Slice slice = down_cast<const BinaryColumn*>(data_column)->get_slice(index);
+        return slice.to_string();
+    }
+    case LogicalType::TYPE_JSON: {
+        using ColumnType = RunTimeColumnType<LogicalType::TYPE_JSON>;
+        auto item = down_cast<const ColumnType*>(data_column)->get_object(index);
+        // TODO: item->to_string() return type is StatusOr,
+        // should handle the exception when StatusOr is not ok.
+        return std::move(item->to_string()).value();
+    }
+    case LogicalType::TYPE_ARRAY:
+    case LogicalType::TYPE_MAP:
+    case LogicalType::TYPE_STRUCT: {
+        return data_column->debug_item(index);
+    }
+    default:
+        std::string error_msg = "Unsupported type:" + type_to_string_v2(_field->type()->type());
+        LOG(WARNING) << error_msg;
+        throw std::runtime_error(error_msg);
+    }
 }
 
 } // namespace starrocks::lake::format

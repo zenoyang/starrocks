@@ -42,7 +42,7 @@ public enum DataType {
     DATE(17, "DATE"),
     DATETIME(18, "DATETIME"),
     ARRAY(19, "ARRAY", false),
-    JSON(20, "JSON", false),
+    JSON(20, "JSON"),
     MAP(21, "MAP", false),
     STRUCT(22, "STRUCT", false);
 

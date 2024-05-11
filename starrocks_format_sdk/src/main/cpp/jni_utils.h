@@ -76,11 +76,10 @@ static inline jmethodID get_method_id(JNIEnv* env, jclass this_class, const char
 }
 
 static inline std::string jstring_to_cstring(JNIEnv* env, jstring& jvalue) {
-    const jsize utf8_len = env->GetStringUTFLength(jvalue);
-    const jsize unicode_len = env->GetStringLength(jvalue);
-    char buffer[utf8_len];
-    env->GetStringUTFRegion(jvalue, 0, unicode_len, buffer);
-    return std::string(buffer, utf8_len);
+    const char* str = env->GetStringUTFChars(jvalue, NULL);
+    std::string value = std::string(str);
+    env->ReleaseStringUTFChars(jvalue, str);
+    return value;
 }
 
 static inline jstring cstring_to_jstring(JNIEnv* env, std::string string) {

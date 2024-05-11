@@ -468,3 +468,41 @@ values
 (4, 4, true, -4, -40, -400, -4000, -40000, -493.82715, -93827.15604936, "2019-10-31", "2019-12-30 22:33:44", -49382.27, -493827156050.272, -49382715604938271560494.2716, "c_char:name4", "c_varchar:name4")
 ;
 
+
+CREATE TABLE `tb_json_two_key_unique` (
+  `rowId` int(11) NULL COMMENT "",
+  `rowId2` int(11) NULL COMMENT "",
+  `c_varchar` varchar(512) NULL COMMENT "",
+  `c_long_varchar` varchar(1048576) NULL COMMENT "",
+  `c_json` json NULL COMMENT ""
+) ENGINE=OLAP
+UNIQUE KEY(`rowId`, `rowId2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`rowId`, `rowId2`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"datacache.enable" = "true",
+"storage_volume" = "minio_volume",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "false",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `tb_json_two_key_primary` (
+  `rowId` int(11)  COMMENT "",
+  `rowId2` int(11)  COMMENT "",
+  `c_varchar` varchar(512) NULL COMMENT "",
+  `c_long_varchar` varchar(1048576) NULL COMMENT "",
+  `c_json` json NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`rowId`, `rowId2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`rowId`, `rowId2`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"datacache.enable" = "true",
+"storage_volume" = "minio_volume",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "false",
+"compression" = "LZ4"
+);

@@ -71,7 +71,7 @@ public class BaseFormatTest {
 
     protected static ColumnPB toPbColumn(Column column) {
         int stringLength = columnLength(column);
-        return ColumnPB.newBuilder()
+        ColumnPB.Builder builder =  ColumnPB.newBuilder()
                 .setUniqueId(column.getUniqueId())
                 .setName(column.getName())
                 .setType(column.getPrimitiveType())
@@ -79,12 +79,16 @@ public class BaseFormatTest {
                 .setAggregation(Optional.ofNullable(column.getAggregationType()).orElse("NONE"))
                 .setIsNullable(Boolean.TRUE.equals(column.getAllowNull()))
                 // .setDefaultValue(ByteString.copyFrom(column.getDefaultValue(), StandardCharsets.UTF_8))
-                .setPrecision(column.getPrecision())
-                .setFrac(column.getScale())
                 .setLength(stringLength)
                 .setIndexLength(stringLength)
-                .setIsAutoIncrement(Boolean.TRUE.equals(column.getAutoIncrement()))
-                .build();
+                .setIsAutoIncrement(Boolean.TRUE.equals(column.getAutoIncrement()));
+        if (column.getPrecision() != null) {
+            builder.setPrecision(column.getPrecision());
+        }
+        if (column.getScale() != null) {
+            builder.setFrac(column.getScale());
+        }
+        return builder.build();
     }
 
     private static int columnLength(Column column) {
