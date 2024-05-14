@@ -23,6 +23,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/starrocks_format")
 # Set starrocks libraries
 set(STARROCKS_LIBS
     ${WL_START_GROUP}
+    # Agent
     Common
     Column
     Connector
@@ -36,12 +37,17 @@ set(STARROCKS_LIBS
     Storage
     Rowset
     Runtime
+    # Service
+    # ServiceBE
     Types
+    # Udf
     Util
     Script
     StarRocksGen
     Webserver
     TestUtil
+    # Tools
+    # Geo
     BlockCache
     ${WL_END_GROUP}
 )
