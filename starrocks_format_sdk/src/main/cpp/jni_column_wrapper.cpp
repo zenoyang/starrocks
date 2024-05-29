@@ -189,6 +189,23 @@ JNIEXPORT jstring JNICALL Java_com_starrocks_format_Column_nativeGetString(JNIEn
     return jvalue;
 }
 
+JNIEXPORT jbyteArray JNICALL Java_com_starrocks_format_Column_nativeGetBinary(JNIEnv* env, jobject jobj, jlong handler,
+                                                                              jlong index) {
+    jbyteArray jvalue = 0;
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
+    SAFE_CALL_COLUMN_FUNCATION(column, {
+        Slice value = column->get_slice(index);
+        jbyteArray byteArray = env->NewByteArray(value.get_size());
+        jbyte* bytes = env->GetByteArrayElements(byteArray, NULL);
+        for (int i = 0; i < value.get_size(); i++) {
+            bytes[i] = value[i];
+        }
+        env->ReleaseByteArrayElements(byteArray, bytes, 0);
+        jvalue = byteArray;
+    });
+    return jvalue;
+}
+
 JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendNull(JNIEnv* env, jobject jobj, jlong handler) {
     StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
@@ -280,7 +297,6 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendDecimal(JNIE
                                                                             jbyteArray jvalue) {
     StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
     SAFE_CALL_COLUMN_FUNCATION(column, {
-        // int128_t value = BigInteger_to_native_value<int128_t>(env, jvalue);
         std::vector<uint8_t> value = jbyteArray_to_carray(env, jvalue);
         column->append_decimal(value);
     });
@@ -324,6 +340,15 @@ JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendString(JNIEn
         if (!st.ok()) {
             env->ThrowNew(kRuntimeExceptionClass, st.message().get_data());
         }
+    });
+}
+
+JNIEXPORT void JNICALL Java_com_starrocks_format_Column_nativeAppendBinary(JNIEnv* env, jobject jobj, jlong handler,
+                                                                           jbyteArray jvalue) {
+    StarRocksFormatColumn* column = reinterpret_cast<StarRocksFormatColumn*>(handler);
+    SAFE_CALL_COLUMN_FUNCATION(column, {
+        std::vector<uint8_t> value = jbyteArray_to_carray(env, jvalue);
+        column->append_binary(value);
     });
 }
 

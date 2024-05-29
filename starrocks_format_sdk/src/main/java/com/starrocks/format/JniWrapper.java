@@ -18,7 +18,7 @@
 package com.starrocks.format;
 
 public class JniWrapper {
-    public static final String JNI_LIB_VERSION = "3.2.3-ve-1";
+    public static final String JNI_LIB_VERSION = "3.2.3-ve-2";
 
     private static final JniWrapper INSTANCE = new JniWrapper();
 

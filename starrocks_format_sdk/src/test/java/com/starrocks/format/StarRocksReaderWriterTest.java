@@ -37,12 +37,12 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.sql.Date;
 import java.sql.Timestamp;
@@ -51,6 +51,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 
 public class StarRocksReaderWriterTest extends BaseFormatTest {
@@ -63,13 +64,127 @@ public class StarRocksReaderWriterTest extends BaseFormatTest {
     private static Stream<Arguments> testReadAfterWrite() {
         return Stream.of(
                 Arguments.of("tb_json_two_key_primary"),
-                Arguments.of("tb_json_two_key_unique")
+                Arguments.of("tb_json_two_key_unique"),
+                Arguments.of("tb_binary_two_key_duplicate"),
+                Arguments.of("tb_binary_two_key_primary"),
+                Arguments.of("tb_binary_two_key_unique")
         );
     }
 
     @ParameterizedTest
     @MethodSource("testReadAfterWrite")
     public void testReadAfterWrite(String tableName) throws Exception {
+        String label = String.format("bypass_write_%s_%s_%s",
+                DB_NAME, tableName, RandomStringUtils.randomAlphabetic(8));
+        TabletSchemaPB tabletSchema = toPbTabletSchema(restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName));
+        List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
+        assertFalse(partitions.isEmpty());
+
+        // begin transaction
+        TransactionResult beginTxnResult = restClient.beginTransaction(DEFAULT_CATALOG, DB_NAME, tableName, label);
+        assertTrue(beginTxnResult.isOk());
+
+        List<TabletCommitInfo> committedTablets = new ArrayList<>();
+        for (TablePartition partition : partitions) {
+            List<TablePartition.Tablet> tablets = partition.getTablets();
+            assertFalse(tablets.isEmpty());
+
+            int tabletIndex = 0;
+            for (TablePartition.Tablet tablet : tablets) {
+                Long tabletId = tablet.getId();
+                Long backendId = tablet.getPrimaryComputeNodeId();
+                int startId = tabletIndex * 1000;
+                tabletIndex++;
+
+                try {
+                    StarRocksWriter writer = new StarRocksWriter(tabletId,
+                            tabletSchema,
+                            beginTxnResult.getTxnId(),
+                            partition.getStoragePath(),
+                            settings.toMap());
+                    writer.open();
+                    // write use chunk interface
+                    Chunk chunk = writer.newChunk(3);
+
+                    chunk.reset();
+                    fillSampleData(tabletSchema, chunk, startId, 3);
+                    writer.write(chunk);
+
+                    chunk.reset();
+                    fillSampleData(tabletSchema, chunk, startId + 200, 3);
+                    writer.write(chunk);
+
+                    chunk.release();
+                    writer.flush();
+                    writer.finish();
+                    writer.close();
+                    writer.release();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    fail();
+                }
+
+                committedTablets.add(new TabletCommitInfo(tabletId, backendId));
+            }
+        }
+
+        TransactionResult prepareTxnResult = restClient.prepareTransaction(
+                DEFAULT_CATALOG, DB_NAME, beginTxnResult.getLabel(), committedTablets, null);
+        assertTrue(prepareTxnResult.isOk());
+
+        TransactionResult commitTxnResult = restClient.commitTransaction(
+                DEFAULT_CATALOG, DB_NAME, prepareTxnResult.getLabel());
+        assertTrue(commitTxnResult.isOk());
+
+        // read all data test
+        int expectedNumRows = 18;
+        // read chunk
+        long totalRows = 0;
+        partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
+        for (TablePartition partition : partitions) {
+            long version = partition.getVisibleVersion();
+            for (TablePartition.Tablet tablet : partition.getTablets()) {
+                Long tabletId = tablet.getId();
+
+                StarRocksReader reader = new StarRocksReader(
+                        tabletId, version, tabletSchema, tabletSchema, partition.getStoragePath(), settings.toMap());
+                reader.open();
+
+                long numRows;
+                do {
+                    Chunk chunk = reader.getNext();
+                    numRows = chunk.numRow();
+
+                    checkValue(tabletSchema, chunk, numRows);
+                    chunk.release();
+
+                    totalRows += numRows;
+                } while (numRows > 0);
+
+                // should be empty chunk
+                Chunk chunk = reader.getNext();
+                assertEquals(0, chunk.numRow());
+                chunk.release();
+
+                reader.close();
+                reader.release();
+            }
+        }
+
+        assertEquals(expectedNumRows, totalRows);
+
+    }
+
+    private static Stream<Arguments> testReadAfterWriteWithJsonFilter() {
+        return Stream.of(
+                Arguments.of("tb_json_two_key_primary"),
+                Arguments.of("tb_json_two_key_unique")
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("testReadAfterWriteWithJsonFilter")
+    public void testReadAfterWriteWithJsonFilter(String tableName) throws Exception {
         String label = String.format("bypass_write_%s_%s_%s",
                 DB_NAME, tableName, RandomStringUtils.randomAlphabetic(8));
         TabletSchemaPB tabletSchema = toPbTabletSchema(restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName));
@@ -238,7 +353,6 @@ public class StarRocksReaderWriterTest extends BaseFormatTest {
         assertEquals(expectedTotalRows, totalRows);
 
     }
-
 
     @Test
     public void testWriteLongJson(@TempDir Path tempDir) throws Exception {
@@ -492,6 +606,14 @@ public class StarRocksReaderWriterTest extends BaseFormatTest {
                     case VARCHAR:
                         column.appendString(pbColumn.getName() + ":name" + rowId);
                         break;
+                    case BINARY:
+                    case VARBINARY:
+                        String valuePrefix = pbColumn.getName() + ":name" + rowId + ":";
+                        ByteBuffer buffer = ByteBuffer.allocate(valuePrefix.getBytes().length + 4);
+                        buffer.put(valuePrefix.getBytes());
+                        buffer.putInt(rowId);
+                        column.appendBinary(buffer.array());
+                        break;
                     case JSON:
                         Gson gson = new Gson();
                         Map<String, Object> jsonMap = new HashMap<>();
@@ -694,6 +816,15 @@ public class StarRocksReaderWriterTest extends BaseFormatTest {
                     case VARCHAR:
                         assertEquals(pbColumn.getName() + ":name" + rowId, column.getString(rowIdx));
                         break;
+                    case BINARY:
+                    case VARBINARY:
+                        String valuePrefix = pbColumn.getName() + ":name" + rowId + ":";
+                        ByteBuffer buffer = ByteBuffer.allocate(valuePrefix.getBytes().length + 4);
+                        buffer.put(valuePrefix.getBytes());
+                        buffer.putInt(rowId);
+                        byte[] value = column.getBinary(rowIdx);
+                        assertTrue(areByteArraysEqual(buffer.array(), value));
+                        break;
                     case JSON:
                         String rowStr = column.getString(rowIdx);
                         Gson gson = new Gson();
@@ -749,5 +880,20 @@ public class StarRocksReaderWriterTest extends BaseFormatTest {
             stringBuilder.append('a');
         }
         return stringBuilder.toString();
+    }
+
+    private static boolean areByteArraysEqual(byte[] array1, byte[] array2) {
+        if (array1 == array2) {
+            return true;
+        }
+        if (array1 == null || array2 == null || array1.length != array2.length) {
+            return false;
+        }
+        for (int i = 0; i < array1.length; ++i) {
+            if (array1[i] != array2[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 }

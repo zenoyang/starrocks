@@ -488,6 +488,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 
+
 CREATE TABLE `tb_json_two_key_primary` (
   `rowId` int(11)  COMMENT "",
   `rowId2` int(11)  COMMENT "",
@@ -506,3 +507,43 @@ PROPERTIES (
 "enable_persistent_index" = "false",
 "compression" = "LZ4"
 );
+
+
+CREATE TABLE `tb_binary_two_key_duplicate` (
+  `rowId` int(11) NULL COMMENT "",
+  `rowId2` int(11) NULL COMMENT "",
+  `c_varbinary` varbinary NULL COMMENT "",
+  `c_binary` binary NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`rowId`, `rowId2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`rowId`, `rowId2`) BUCKETS 3 
+PROPERTIES (
+"replication_num" = "1"
+); 
+
+CREATE TABLE `tb_binary_two_key_unique` (
+  `rowId` int(11) NULL COMMENT "",
+  `rowId2` int(11) NULL COMMENT "",
+  `c_varbinary` varbinary NULL COMMENT "",
+  `c_binary` binary NULL COMMENT ""
+) ENGINE=OLAP 
+UNIQUE KEY(`rowId`, `rowId2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`rowId`, `rowId2`) BUCKETS 3 
+PROPERTIES (
+"replication_num" = "1"
+); 
+
+CREATE TABLE `tb_binary_two_key_primary` (
+  `rowId` int(11)  COMMENT "",
+  `rowId2` int(11)  COMMENT "",
+  `c_varbinary` varbinary NULL COMMENT "",
+  `c_binary` binary NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`rowId`, `rowId2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`rowId`, `rowId2`) BUCKETS 3 
+PROPERTIES (
+"replication_num" = "1"
+); 

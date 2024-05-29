@@ -103,6 +103,10 @@ public class Column {
         return nativeGetString(nativeHandler, rowIdx);
     }
 
+    public byte[] getBinary(long rowIdx) {
+        return nativeGetBinary(nativeHandler, rowIdx);
+    }
+
     public native boolean nativeIsNullAt(long nativeHandler, long rowIdx);
 
     public native boolean nativeGetBool(long nativeHandler, long rowIdx);
@@ -128,6 +132,8 @@ public class Column {
     public native long nativeGetTimestamp(long nativeHandler, long rowIdx);
 
     public native String nativeGetString(long nativeHandler, long rowIdx);
+
+    public native byte[] nativeGetBinary(long nativeHandler, long rowIdx);
 
     // write api
     public void appendNull() {
@@ -190,6 +196,9 @@ public class Column {
         nativeAppendString(nativeHandler, value);
     }
 
+    public void appendBinary(byte[] value) {
+        nativeAppendBinary(nativeHandler, value);
+    }
 
     public native void nativeAppendNull(long nativeHandler);
 
@@ -217,5 +226,5 @@ public class Column {
 
     public native void nativeAppendString(long nativeHandler, String value);
 
-
+    public native void nativeAppendBinary(long nativeHandler, byte[] value);
 }

@@ -35,6 +35,7 @@ public:
     void append_long(int64_t value);
     void append_decimal(std::vector<uint8_t>& value);
     Status append_string(std::string& value);
+    Status append_binary(std::vector<uint8_t>& value);
 
     int8_t get_bool(size_t index);
     int8_t get_byte(size_t index);
@@ -52,6 +53,7 @@ public:
     RunTimeCppType<type> get_fixlength_column_value(size_t index);
 
     std::string get_string(size_t index);
+    Slice get_slice(size_t index);
 
 private:
     // we should not maintain _column and _field 's memory,

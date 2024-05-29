@@ -98,6 +98,11 @@ Status StarRocksFormatColumn::append_string(std::string& value) {
     return Status::OK();
 }
 
+Status StarRocksFormatColumn::append_binary(std::vector<uint8_t>& value) {
+    _column->append_datum(Datum(Slice(value.data(), value.size())));
+    return Status::OK();
+}
+
 int8_t StarRocksFormatColumn::get_bool(size_t index) {
     return get_fixlength_column_value<TYPE_BOOLEAN>(index);
 }
@@ -192,6 +197,25 @@ std::string StarRocksFormatColumn::get_string(size_t index) {
     case LogicalType::TYPE_MAP:
     case LogicalType::TYPE_STRUCT: {
         return data_column->debug_item(index);
+    }
+    case LogicalType::TYPE_BINARY:
+    case LogicalType::TYPE_VARBINARY: {
+        return data_column->debug_item(index);
+    }
+    default:
+        std::string error_msg = "Unsupported type:" + type_to_string_v2(_field->type()->type());
+        LOG(WARNING) << error_msg;
+        throw std::runtime_error(error_msg);
+    }
+}
+
+Slice StarRocksFormatColumn::get_slice(size_t index) {
+    auto* data_column = ColumnHelper::get_data_column(_column);
+    switch (_field->type()->type()) {
+    case LogicalType::TYPE_BINARY:
+    case LogicalType::TYPE_VARBINARY: {
+        Slice slice = down_cast<const BinaryColumn*>(data_column)->get_slice(index);
+        return slice;
     }
     default:
         std::string error_msg = "Unsupported type:" + type_to_string_v2(_field->type()->type());
