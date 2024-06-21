@@ -198,21 +198,23 @@ public class StarRocksReaderTest extends BaseFormatTest {
 
     private static Stream<Arguments> testReadWithFilterProject() {
         return Stream.of(
-                Arguments.of("tb_all_primitivetype_read_two_key_unique", 3, 1, "rowid,c_date,c_datetime,c_smallint",  "rowid,c_date,c_datetime", "select rowId, c_date, c_datetime from demo.tb_all_primitivetype_read_two_key_unique where c_smallint = 30")
+                Arguments.of("tb_all_primitivetype_read_two_key_unique", 1, "rowid,c_date,c_datetime,c_smallint",  "rowid,c_date,c_datetime", "select rowId, c_date, c_datetime from demo.tb_all_primitivetype_read_two_key_unique where c_smallint = 30"),
+                Arguments.of("tb_part_read_two_key_unique", 1, "rowid, part_int, part_date, c_date, c_datetime, c_bigint",  "rowid, c_bigint, c_date, c_datetime", "select * from demo.tb_part_read_two_key_unique where part_date = '2024-06-03'"),
+                Arguments.of("tb_part_read_part_key_first", 1, "rowid, part_int, part_date, c_date, c_datetime, c_bigint",  "rowid, c_bigint, c_date, c_datetime", "select * from demo.tb_part_read_part_key_first where part_date = '2024-06-03'")
         );
     }
 
     @ParameterizedTest
     @MethodSource
-    public void testReadWithFilterProject(String tableName, long version, long expectedTotalRows, String requiredColumns, String outputColumns, String sql) throws Exception {
+    public void testReadWithFilterProject(String tableName, long expectedTotalRows, String requiredColumns, String outputColumns, String sql) throws Exception {
         TabletSchemaPB tabletAllSchema = toPbTabletSchema(restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName));
         List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
         assertFalse(partitions.isEmpty());
 
         String queryPlan = restClient.getQueryPlan(DB_NAME, tableName, sql).getOpaquedQueryPlan();
 
-        Set<String> requiredColumnName = new HashSet<>(Arrays.asList(requiredColumns.split(",")));
-        Set<String> outputColumnName = new HashSet<>(Arrays.asList(outputColumns.split(",")));
+        Set<String> requiredColumnName = Arrays.stream(requiredColumns.split(",")).map(String::trim).collect(Collectors.toSet());
+        Set<String> outputColumnName = Arrays.stream(outputColumns.split(",")).map(String::trim).collect(Collectors.toSet());
 
         TabletSchemaPB.Builder builder = tabletAllSchema.toBuilder().clearColumn();
         List<TabletSchema.ColumnPB> pbColumns = tabletAllSchema.getColumnList().stream()
@@ -231,6 +233,7 @@ public class StarRocksReaderTest extends BaseFormatTest {
         // read chunk
         long totalRows = 0;
         for (TablePartition partition : partitions) {
+            long version =  partition.getVisibleVersion();
             for (TablePartition.Tablet tablet : partition.getTablets()) {
                 Long tabletId = tablet.getId();
 
@@ -567,7 +570,11 @@ public class StarRocksReaderTest extends BaseFormatTest {
                 ColumnPB pbColumn = schema.getColumn(colIdx);
                 Column column = chunk.getColumn(colIdx);
                 if ("rowid".equalsIgnoreCase(pbColumn.getName())) {
-                    rowId = column.getInt(rowIdx);
+                    if (pbColumn.getType().equals("VARCHAR")) {
+                        rowId = Integer.valueOf(column.getString(rowIdx));
+                    } else {
+                        rowId = column.getInt(rowIdx);
+                    }
                     break;
                 }
             }
@@ -576,7 +583,11 @@ public class StarRocksReaderTest extends BaseFormatTest {
                 ColumnPB pbColumn = schema.getColumn(colIdx);
                 Column column = chunk.getColumn(colIdx);
                 if ("rowid".equalsIgnoreCase(pbColumn.getName())) {
-                    assertEquals(rowId, column.getInt(rowIdx));
+                    if (pbColumn.getType().equals("VARCHAR")) {
+                        rowId = Integer.valueOf(column.getString(rowIdx));
+                    } else {
+                        rowId = column.getInt(rowIdx);
+                    }
                     continue;
                 }
                 if ("rowid2".equalsIgnoreCase(pbColumn.getName())) {

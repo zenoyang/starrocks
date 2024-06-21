@@ -31,6 +31,8 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+#include <glog/logging.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <filesystem>
 #include <fstream>
@@ -40,10 +42,12 @@
 
 #include "common/config.h"
 #include "fs/fs_s3.h"
+#include "runtime/exec_env.h"
 #include "runtime/time_types.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_define.h"
+#include "util/mem_info.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks::lake {
@@ -53,46 +57,63 @@ Aws::SDKOptions aws_sdk_options;
 
 lake::TabletManager* _lake_tablet_manager = nullptr;
 
+void initialize_config() {
+
+    setenv("STARROCKS_HOME", "./", 0);
+    setenv("UDF_RUNTIME_DIR", "./", 0);
+
+    // load config file
+    std::string conffile = std::filesystem::current_path();
+    conffile += "/starrocks.conf";
+    const char* config_file_path = conffile.c_str();
+    std::ifstream ifs(config_file_path);
+    if (!ifs.good()) {
+        config_file_path = nullptr;
+    }
+    // init config
+    if (!starrocks::config::init(config_file_path, true)) {
+        LOG(WARNING) << "read config file:" << config_file_path << " failed!";
+        return;
+    }
+    starrocks::config::disable_storage_page_cache = "true";
+    starrocks::config::mem_limit = "4194304";
+    starrocks::config::chunk_reserved_bytes_limit = 4194304;
+}
+
 void starrocks_format_initialize(void) {
     if (!_starrocks_format_inited) {
-        fprintf(stderr, "starrocks format module start to initialize\n");
-        // load config file
-        std::string conffile = std::filesystem::current_path();
-        conffile += "/starrocks.conf";
-        const char* config_file_path = conffile.c_str();
-        std::ifstream ifs(config_file_path);
-        if (!ifs.good()) {
-            config_file_path = nullptr;
-        }
-        if (!starrocks::config::init(config_file_path, true)) {
-            fprintf(stderr, "error read config file. \n");
-            return;
-        }
-
+        LOG(INFO) << "starrocks format module start to initialize";
+        // initialize config
+        initialize_config();
+        // init aws sdk
+        Aws::SDKOptions aws_sdk_options;
         Aws::InitAPI(aws_sdk_options);
 
+        MemInfo::init();
         date::init_date_cache();
 
         TimezoneUtils::init_time_zones();
 
+        GlobalEnv::GetInstance()->init();
+
         auto lake_location_provider = std::make_shared<FixedLocationProvider>("");
         _lake_tablet_manager = new lake::TabletManager(lake_location_provider, config::lake_metadata_cache_limit);
-        fprintf(stderr, "starrocks format module has been initialized successfully\n");
+        LOG(INFO) << "starrocks format module has been initialized successfully";
         _starrocks_format_inited = true;
     } else {
-        fprintf(stderr, "starrocks format module has already been initialized\n");
+        LOG(INFO) << "starrocks format module has already been initialized";
     }
 }
 
 void starrocks_format_deinit(void) {
     if (_starrocks_format_inited) {
-        fprintf(stderr, "starrocks format module start to deinitialize");
+        LOG(INFO) << "starrocks format module start to deinitialize";
         Aws::ShutdownAPI(aws_sdk_options);
         SAFE_DELETE(_lake_tablet_manager);
         // SAFE_DELETE(_lake_update_manager);
-        fprintf(stderr, "starrocks format module has been deinitialized successfully\n");
+        LOG(INFO) << "starrocks format module has been deinitialized successfully";
     } else {
-        fprintf(stderr, "starrocks format module has already been deinitialized\n");
+        LOG(INFO) << "starrocks format module has already been deinitialized";
     }
 }
 
