@@ -180,7 +180,7 @@
                 <artifactId>protobuf-maven-plugin</artifactId>
                 <version>0.5.1</version>
                 <configuration>
-                    <protocExecutable>/var/local/thirdparty/installed/bin/protoc</protocExecutable>
+                    <protocExecutable>/home/huangzhaowei.416/starrocks-32/thirdparty/installed/bin/protoc</protocExecutable>
                     <protoSourceRoot>../gensrc/proto</protoSourceRoot>
                     <outputDirectory>target/generated-sources/proto/</outputDirectory>
                     <clearOutputDirectory>false</clearOutputDirectory>
@@ -297,7 +297,7 @@
         <profile>
             <id>format-lib</id>
             <properties>
-                <compile-be-parallel>12</compile-be-parallel>
+                <compile-be-parallel>20</compile-be-parallel>
             </properties>
             <build>
                 <plugins>

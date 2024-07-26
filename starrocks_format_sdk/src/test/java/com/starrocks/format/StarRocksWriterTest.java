@@ -44,6 +44,7 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -131,6 +132,92 @@ public class StarRocksWriterTest extends BaseFormatTest {
         TransactionResult commitTxnResult = restClient.commitTransaction(
                 DEFAULT_CATALOG, DB_NAME, prepareTxnResult.getLabel());
         assertTrue(commitTxnResult.isOk());
+    }
+
+
+    @Test
+    public void testWriteLocalUseChunkForBulkLoad(@TempDir Path tempDir) throws Exception {
+        TabletSchemaPB.Builder schemaBuilder = TabletSchemaPB.newBuilder()
+                .setId(1)
+                .setKeysType(KeysType.DUP_KEYS)
+                .setCompressionType(CompressionTypePB.LZ4_FRAME);
+
+        ColumnType[] columnTypes = new ColumnType[] {
+                new ColumnType(DataType.INT, 4),
+                new ColumnType(DataType.BOOLEAN, 4),
+                new ColumnType(DataType.TINYINT, 1),
+                new ColumnType(DataType.SMALLINT, 2),
+                new ColumnType(DataType.BIGINT, 8),
+                new ColumnType(DataType.LARGEINT, 16),
+                new ColumnType(DataType.FLOAT, 4),
+                new ColumnType(DataType.DOUBLE, 8),
+                new ColumnType(DataType.DATE, 4),
+                new ColumnType(DataType.DATETIME, 8),
+                new ColumnType(DataType.DECIMAL32, 8),
+                new ColumnType(DataType.DECIMAL64, 16),
+                new ColumnType(DataType.VARCHAR, 32 + Integer.SIZE)};
+
+        int colId = 0;
+        for (ColumnType columnType : columnTypes) {
+            ColumnPB.Builder columnBuilder = ColumnPB.newBuilder()
+                    .setName("c_" + columnType.getDataType())
+                    .setUniqueId(colId)
+                    .setIsKey(true)
+                    .setIsNullable(true)
+                    .setType(columnType.getDataType().getLiteral())
+                    .setLength(columnType.getLength())
+                    .setIndexLength(columnType.getLength())
+                    .setAggregation("none");
+            if (columnType.getDataType().getLiteral().startsWith("DECIMAL32")) {
+                columnBuilder.setPrecision(9);
+                columnBuilder.setFrac(2);
+            } else if (columnType.getDataType().getLiteral().startsWith("DECIMAL64")) {
+                columnBuilder.setPrecision(18);
+                columnBuilder.setFrac(3);
+            } else if (columnType.getDataType().getLiteral().startsWith("DECIMAL128")) {
+                columnBuilder.setPrecision(38);
+                columnBuilder.setFrac(4);
+            }
+            schemaBuilder.addColumn(columnBuilder.build());
+            colId++;
+        }
+        TabletSchemaPB schema = schemaBuilder
+                .setNextColumnUniqueId(colId)
+                // sort key index alway the key column index
+                .addSortKeyIdxes(0)
+                // short key size is less than sort keys
+                .setNumShortKeyColumns(1)
+                .setNumRowsPerRowBlock(1024)
+                .build();
+
+        long tabletId = 100L;
+        long txnId = 4;
+
+        String tabletRootPath = tempDir.toAbsolutePath().toString();
+        File dir = new File(tabletRootPath + "/data");
+        assertTrue(dir.mkdirs());
+
+        Map<String,String> config = new HashMap<>();
+        config.put("starrocks.format.mode", "share_nothing");
+        StarRocksWriter writer = new StarRocksWriter(tabletId,
+                schema,
+                txnId,
+                tabletRootPath,
+                config);
+        writer.open();
+
+        // write use chunk interface
+        Chunk chunk = writer.newChunk(5);
+        fillSampleData(schema, chunk, 0, 5);
+        writer.write(chunk);
+
+        chunk.release();
+        writer.flush();
+        writer.finish();
+        writer.close();
+        writer.release();
+        System.out.println(tabletRootPath);
+        Thread.sleep(100000);
     }
 
     @Test

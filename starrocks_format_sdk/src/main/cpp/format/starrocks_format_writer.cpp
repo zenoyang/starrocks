@@ -47,6 +47,13 @@ StarRocksFormatWriter::StarRocksFormatWriter(int64_t tablet_id, std::shared_ptr<
         std::string writer_type = it->second;
         _writer_type = WriterType(std::stoi(writer_type));
     }
+    auto mode_it = _options.find("starrocks.format.mode");
+    if (mode_it != _options.end()) {
+        std::string mode = mode_it->second;
+        if (mode == "share_nothing") {
+            _share_data = false;
+        }
+    }
     _max_rows_per_segment =
             getIntOrDefault(_options, "starrocks.format.rows_per_segment", std::numeric_limits<uint32_t>::max());
 }
@@ -64,9 +71,12 @@ Status StarRocksFormatWriter::open() {
         // fs.s3a.retry.interval
         auto fs_options = filter_map_by_key_prefix(_options, "fs.");
         ASSIGN_OR_RETURN(auto fs, FileSystem::Create(_tablet_root_path, FSOptions(fs_options)));
-        // get tablet schema;
-        ASSIGN_OR_RETURN(auto metadata, get_tablet_metadata(fs));
-        _tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
+        if (_share_data) {
+            // get tablet schema;
+            ASSIGN_OR_RETURN(auto metadata, get_tablet_metadata(fs));
+            _tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
+        }
+
         _tablet = std::make_unique<Tablet>(_lake_tablet_manager, _tablet_id, _provider, _tablet_schema);
         // create tablet writer
         ASSIGN_OR_RETURN(_tablet_writer, _tablet->new_writer(_writer_type, _txn_id, _max_rows_per_segment));
@@ -93,7 +103,11 @@ Status StarRocksFormatWriter::flush() {
 
 Status StarRocksFormatWriter::finish() {
     _tablet_writer->finish();
-    return finish_txn_log();
+    if (_share_data) {
+        return finish_txn_log();
+    } else {
+        return finish_schema_pb();
+    }
 }
 
 StarRocksFormatChunk* StarRocksFormatWriter::new_chunk(size_t capacity) {
@@ -123,6 +137,19 @@ Status StarRocksFormatWriter::finish_txn_log() {
     return put_txn_log(std::move(txn_log));
 }
 
+Status StarRocksFormatWriter::finish_schema_pb() {
+    std::string  tablet_schema_path = _tablet_root_path + "/tablet.schema";
+    if (_tablet_schema) {
+        std::shared_ptr<TabletSchemaPB> pb = std::make_shared<TabletSchemaPB>();
+        _tablet_schema->to_schema_pb(pb.get());
+        auto fs_options = filter_map_by_key_prefix(_options, "fs.");
+        ASSIGN_OR_RETURN(auto fs, FileSystem::Create(tablet_schema_path, FSOptions(fs_options)));
+        ProtobufFile file(tablet_schema_path, fs);
+        return file.save(*pb);
+    } else {
+        return Status::InternalError("_tablet_schema was not defined");
+    }
+}
 Status StarRocksFormatWriter::put_txn_log(const TxnLogPtr& log) {
     if (UNLIKELY(!log->has_tablet_id())) {
         return Status::InvalidArgument("txn log does not have tablet id");

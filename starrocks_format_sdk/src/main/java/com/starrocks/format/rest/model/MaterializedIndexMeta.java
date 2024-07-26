@@ -34,6 +34,21 @@ public class MaterializedIndexMeta {
     @JsonProperty("columns")
     private List<Column> columns;
 
+    @JsonProperty("schemaId")
+    private long schemaId;
+
+    @JsonProperty("sortKeyIdxes")
+    public List<Integer> sortKeyIdxes;
+
+    @JsonProperty("sortKeyUniqueIds")
+    public List<Integer> sortKeyUniqueIds;
+
+    @JsonProperty("schemaVersion")
+    private int schemaVersion = 0;
+
+    @JsonProperty("shortKeyColumnCount")
+    private short shortKeyColumnCount;
+
     public MaterializedIndexMeta() {
     }
 
@@ -59,5 +74,45 @@ public class MaterializedIndexMeta {
 
     public void setColumns(List<Column> columns) {
         this.columns = columns;
+    }
+
+    public long getSchemaId() {
+        return schemaId;
+    }
+
+    public void setSchemaId(long schemaId) {
+        this.schemaId = schemaId;
+    }
+
+    public List<Integer> getSortKeyIdxes() {
+        return sortKeyIdxes;
+    }
+
+    public void setSortKeyIdxes(List<Integer> sortKeyIdxes) {
+        this.sortKeyIdxes = sortKeyIdxes;
+    }
+
+    public List<Integer> getSortKeyUniqueIds() {
+        return sortKeyUniqueIds;
+    }
+
+    public void setSortKeyUniqueIds(List<Integer> sortKeyUniqueIds) {
+        this.sortKeyUniqueIds = sortKeyUniqueIds;
+    }
+
+    public int getSchemaVersion() {
+        return schemaVersion;
+    }
+
+    public void setSchemaVersion(int schemaVersion) {
+        this.schemaVersion = schemaVersion;
+    }
+
+    public short getShortKeyColumnCount() {
+        return shortKeyColumnCount;
+    }
+
+    public void setShortKeyColumnCount(short shortKeyColumnCount) {
+        this.shortKeyColumnCount = shortKeyColumnCount;
     }
 }

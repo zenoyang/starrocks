@@ -74,6 +74,12 @@ public class TableSchema {
     @JsonProperty("properties")
     private Map<String, String> properties;
 
+    @JsonProperty("bfFpp")
+    private double bfFpp;
+
+    @JsonProperty("compressionType")
+    private String compressionType;
+
     public TableSchema() {
     }
 
@@ -203,5 +209,21 @@ public class TableSchema {
 
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
+    }
+
+    public double getBfFpp() {
+        return bfFpp;
+    }
+
+    public void setBfFpp(double bfFpp) {
+        this.bfFpp = bfFpp;
+    }
+
+    public String getCompressionType() {
+        return compressionType;
+    }
+
+    public void setCompressionType(String compressionType) {
+        this.compressionType = compressionType;
     }
 }
