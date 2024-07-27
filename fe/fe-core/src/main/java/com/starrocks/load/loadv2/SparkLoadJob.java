@@ -298,15 +298,6 @@ public class SparkLoadJob extends BulkLoadJob {
         LOG.info("update to {} state success. job id: {}", state, id);
     }
 
-    private boolean checkState(JobState expectState) {
-        readLock();
-        try {
-            return state == expectState;
-        } finally {
-            readUnlock();
-        }
-    }
-
     /**
      * Check the status of etl job regularly
      * 1. RUNNING, update etl job progress
@@ -991,7 +982,7 @@ public class SparkLoadJob extends BulkLoadJob {
      * <p>
      * These params are sent to Be through push task
      */
-    private static class PushBrokerReaderParams {
+    public static class PushBrokerReaderParams {
         TBrokerScanRange tBrokerScanRange;
         TDescriptorTable tDescriptorTable;
 

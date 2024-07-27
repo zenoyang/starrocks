@@ -172,6 +172,7 @@ enum TPushType {
     // for spark load push request
     LOAD_V2,
     CANCEL_DELETE,
+    // for segment load push request
     LOAD_SEGMENT
 }
 

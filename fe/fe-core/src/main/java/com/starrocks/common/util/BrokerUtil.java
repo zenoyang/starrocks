@@ -94,12 +94,17 @@ public class BrokerUtil {
      */
     public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses)
             throws UserException {
+        parseFile(path, brokerDesc, fileStatuses, true, false);
+    }
+
+    public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses,
+                                 boolean skipDir, boolean isRecursive) throws UserException {
         TNetworkAddress address = getAddress(brokerDesc);
         TFileBrokerService.Client client = borrowClient(address);
         boolean failed = true;
         try {
             TBrokerListPathRequest request = new TBrokerListPathRequest(
-                    TBrokerVersion.VERSION_ONE, path, false, brokerDesc.getProperties());
+                    TBrokerVersion.VERSION_ONE, path, isRecursive, brokerDesc.getProperties());
             TBrokerListResponse tBrokerListResponse = null;
             try {
                 tBrokerListResponse = client.listPath(request);
@@ -113,7 +118,7 @@ public class BrokerUtil {
             }
             failed = false;
             for (TBrokerFileStatus tBrokerFileStatus : tBrokerListResponse.getFiles()) {
-                if (tBrokerFileStatus.isDir) {
+                if (skipDir && tBrokerFileStatus.isDir) {
                     continue;
                 }
                 fileStatuses.add(tBrokerFileStatus);

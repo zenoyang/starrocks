@@ -1308,4 +1308,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         @SerializedName("jr")
         public String jsonRoot;
     }
+
+    boolean checkState(JobState expectState) {
+        readLock();
+        try {
+            return state == expectState;
+        } finally {
+            readUnlock();
+        }
+    }
 }

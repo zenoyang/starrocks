@@ -147,6 +147,7 @@ enum TFileFormatType {
     FORMAT_JSON = 9,
     FORMAT_CSV_ZSTD = 10,
     FORMAT_AVRO = 11,
+    FORMAT_STARROCKS = 12,
 }
 
 // One broker range information.
@@ -169,9 +170,12 @@ struct TBrokerRangeDesc {
     // columns parsed from file path should be after the columns read from file
     10: optional list<string> columns_from_path
     //  it's usefull when format_type == FORMAT_JSON
+
     11: optional bool strip_outer_array;
     12: optional string jsonpaths;
     13: optional string json_root;
+    // it's usefull when format_type == FORMAT_STARROCKS
+    15: optional string schema_path;
 }
 
 enum TObjectStoreType {
