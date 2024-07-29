@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <glog/logging.h>
-
 #include "starrocks_format_writer.h"
+
+#include <glog/logging.h>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -38,7 +38,6 @@ StarRocksFormatWriter::StarRocksFormatWriter(int64_t tablet_id, std::shared_ptr<
           _txn_id(txn_id),
           _tablet_root_path(tablet_root_path),
           _options(options) {
-
     _provider = std::make_shared<FixedLocationProvider>(tablet_root_path);
 
     _writer_type = WriterType::kHorizontal;
@@ -138,12 +137,28 @@ Status StarRocksFormatWriter::finish_txn_log() {
 }
 
 Status StarRocksFormatWriter::finish_schema_pb() {
-    std::string  tablet_schema_path = _tablet_root_path + "/tablet.schema";
+    std::string tablet_schema_path = _tablet_root_path + "/tablet.schema";
+
     if (_tablet_schema) {
         std::shared_ptr<TabletSchemaPB> pb = std::make_shared<TabletSchemaPB>();
         _tablet_schema->to_schema_pb(pb.get());
         auto fs_options = filter_map_by_key_prefix(_options, "fs.");
         ASSIGN_OR_RETURN(auto fs, FileSystem::Create(tablet_schema_path, FSOptions(fs_options)));
+        size_t index = 0;
+        string uuid = generate_uuid_string();
+        for (auto& f : _tablet_writer->files()) {
+            if (is_segment(f.path)) {
+                string source = _tablet_root_path + "/data/" + f.path;
+                string target = _tablet_root_path + "/data/" + uuid + "_" + std::to_string(index) + ".dat";
+                std::cout << "AA = " << source << std::endl;
+                std::cout << "AA = " << target << std::endl;
+                RETURN_IF_ERROR(fs->rename_file(source, target));
+                index++;
+
+            } else {
+                return Status::InternalError(fmt::format("unknown file {}", f.path));
+            }
+        }
         ProtobufFile file(tablet_schema_path, fs);
         return file.save(*pb);
     } else {
@@ -189,4 +204,4 @@ StatusOr<TabletMetadataPtr> StarRocksFormatWriter::get_tablet_metadata(std::shar
     return _lake_tablet_manager->get_tablet_metadata(fs, metadata_location, true);
 }
 
-} // namespace starrocks::lake
+} // namespace starrocks::lake::format
