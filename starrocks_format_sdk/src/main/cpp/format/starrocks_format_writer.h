@@ -75,6 +75,7 @@ private:
     std::unique_ptr<TabletWriter> _tablet_writer;
 
     bool _share_data = true;
+    std::vector<std::shared_ptr<SegmentPB>> _segment_pbs;
 };
 
 } // namespace starrocks::lake

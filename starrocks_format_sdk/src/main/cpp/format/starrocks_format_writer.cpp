@@ -81,6 +81,7 @@ Status StarRocksFormatWriter::open() {
         ASSIGN_OR_RETURN(_tablet_writer, _tablet->new_writer(_writer_type, _txn_id, _max_rows_per_segment));
         _tablet_writer->set_fs(fs);
         _tablet_writer->set_location_provider(_provider);
+        _segment_pbs.emplace_back(std::make_shared<SegmentPB>());
     }
     return _tablet_writer->open();
 }
@@ -91,17 +92,20 @@ void StarRocksFormatWriter::close() {
 
 Status StarRocksFormatWriter::write(StarRocksFormatChunk* chunk) {
     if (chunk != nullptr && chunk->chunk()->num_rows() > 0) {
-        return _tablet_writer->write(*chunk->chunk().get());
+        if (_segment_pbs.size() == 0 || !_segment_pbs.back()->path().empty()) {
+            _segment_pbs.emplace_back(std::make_shared<SegmentPB>());
+        }
+        return _tablet_writer->write(*chunk->chunk().get(), _segment_pbs.back().get());
     }
     return Status::OK();
 }
 
 Status StarRocksFormatWriter::flush() {
-    return _tablet_writer->flush();
+    return _tablet_writer->flush(_segment_pbs.back().get());
 }
 
 Status StarRocksFormatWriter::finish() {
-    _tablet_writer->finish();
+    _tablet_writer->finish(_segment_pbs.back().get());
     if (_share_data) {
         return finish_txn_log();
     } else {
@@ -153,6 +157,14 @@ Status StarRocksFormatWriter::finish_schema_pb() {
                 std::cout << "AA = " << source << std::endl;
                 std::cout << "AA = " << target << std::endl;
                 RETURN_IF_ERROR(fs->rename_file(source, target));
+                string target_pb = target + ".pb";
+                ProtobufFile pb_file(target_pb, fs);
+                _segment_pbs[index]->set_path(target);
+                if (index == 0) {
+                    _segment_pbs[index]->set_num_rows(_tablet_writer->num_rows());
+                }
+                RETURN_IF_ERROR(pb_file.save(*_segment_pbs[index]));
+                std::cout << "AA = " << _segment_pbs[index]->DebugString() << std::endl;
                 index++;
 
             } else {
