@@ -95,6 +95,7 @@ Status StarRocksFormatWriter::write(StarRocksFormatChunk* chunk) {
         if (_segment_pbs.size() == 0 || !_segment_pbs.back()->path().empty()) {
             _segment_pbs.emplace_back(std::make_shared<SegmentPB>());
         }
+        _total_row_size += chunk->chunk()->bytes_usage();
         return _tablet_writer->write(*chunk->chunk().get(), _segment_pbs.back().get());
     }
     return Status::OK();
@@ -162,6 +163,7 @@ Status StarRocksFormatWriter::finish_schema_pb() {
                 _segment_pbs[index]->set_path(target);
                 if (index == 0) {
                     _segment_pbs[index]->set_num_rows(_tablet_writer->num_rows());
+                    _segment_pbs[index]->set_row_size(_total_row_size);
                 }
                 RETURN_IF_ERROR(pb_file.save(*_segment_pbs[index]));
                 std::cout << "AA = " << _segment_pbs[index]->DebugString() << std::endl;

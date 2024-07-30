@@ -76,6 +76,7 @@ private:
 
     bool _share_data = true;
     std::vector<std::shared_ptr<SegmentPB>> _segment_pbs;
+    size_t _total_row_size = 0;
 };
 
 } // namespace starrocks::lake

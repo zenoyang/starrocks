@@ -46,6 +46,7 @@
 #include "common/logging.h"
 #include "common/tracer.h"
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "io/io_error.h"
 #include "runtime/exec_env.h"
 #include "segment_options.h"
@@ -386,6 +387,29 @@ Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& da
         RETURN_IF_ERROR(_flush_update_file(segment_pb, data));
     }
 
+    return Status::OK();
+}
+
+Status RowsetWriter::download_segment(const SegmentPB& segment_pb, std::unique_ptr<SequentialFile> rfile) {
+    // 1. create segment file
+    auto segment_file = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_pb.segment_id());
+    // use MUST_CREATE make sure atomic
+    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(segment_file));
+
+    // 2. download segment file
+    ASSIGN_OR_RETURN(auto size, fs::copy(rfile.get(), wfile.get(), 1024 * 1024));
+
+    DCHECK_EQ(size, segment_pb.data_size());
+
+    // 3. update statistic
+    {
+        std::lock_guard<std::mutex> l(_lock);
+        _total_data_size += segment_pb.data_size();
+        _total_index_size += segment_pb.index_size();
+        _num_rows_written += segment_pb.num_rows();
+        _total_row_size += segment_pb.row_size();
+        _num_segment++;
+    }
     return Status::OK();
 }
 
