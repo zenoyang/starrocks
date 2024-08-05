@@ -42,6 +42,7 @@ public class SegmentBrokerReaderParams {
         // scan range params
         TBrokerScanRangeParams params = new TBrokerScanRangeParams();
         params.setStrict_mode(false);
+        params.addToSrc_slot_ids(-1);
         if (brokerDesc.hasBroker()) {
             params.setProperties(brokerDesc.getProperties());
             params.setUse_broker(true);
