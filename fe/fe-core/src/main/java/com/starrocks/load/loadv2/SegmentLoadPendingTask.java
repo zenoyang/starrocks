@@ -88,6 +88,8 @@ public class SegmentLoadPendingTask extends LoadTask {
         String path = fileGroup.getFilePaths().get(0);
         Set<String> allPbFilePrefix = new HashSet<>();
 
+        segmentAttachment.setRootPath(path);
+
         if (brokerDesc.hasBroker()) {
             BrokerUtil.parseFile(path, brokerDesc, fileStatuses, false, true);
         } else {

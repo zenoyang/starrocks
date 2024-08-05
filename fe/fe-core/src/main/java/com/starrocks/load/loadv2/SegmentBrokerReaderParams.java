@@ -17,7 +17,8 @@ package com.starrocks.load.loadv2;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.Config;
-import com.starrocks.common.LoadException;
+import com.starrocks.common.UserException;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
@@ -38,7 +39,7 @@ public class SegmentBrokerReaderParams {
         this.tBrokerScanRange = new TBrokerScanRange();
     }
 
-    public void init(BrokerDesc brokerDesc) throws LoadException {
+    public void init(String path, BrokerDesc brokerDesc) throws UserException {
         // scan range params
         TBrokerScanRangeParams params = new TBrokerScanRangeParams();
         params.setStrict_mode(false);
@@ -48,6 +49,7 @@ public class SegmentBrokerReaderParams {
             params.setUse_broker(true);
         } else {
             THdfsProperties hdfsProperties = new THdfsProperties();
+            HdfsUtil.getTProperties(path, brokerDesc, hdfsProperties);
             params.setHdfs_properties(hdfsProperties);
             params.setHdfs_read_buffer_size_kb(Config.hdfs_read_buffer_size_kb);
             params.setUse_broker(false);

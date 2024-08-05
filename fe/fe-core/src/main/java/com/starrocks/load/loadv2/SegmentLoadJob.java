@@ -94,6 +94,7 @@ public class SegmentLoadJob extends BulkLoadJob {
     private final Set<Long> finishedReplicas = Sets.newHashSet();
     private final Map<Long, Map<Long, PushTask>> tabletToSentReplicaPushTask = Maps.newHashMap();
     private long quorumFinishTimestamp = -1;
+    private String rootPath;
 
     // only for log replay
     public SegmentLoadJob() {
@@ -125,10 +126,10 @@ public class SegmentLoadJob extends BulkLoadJob {
         submitTask(GlobalStateMgr.getCurrentState().getPendingLoadTaskScheduler(), task);
     }
 
-    private SegmentBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexId) throws LoadException {
+    private SegmentBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexId) throws UserException {
         if (!indexToPushBrokerReaderParams.containsKey(indexId)) {
             SegmentBrokerReaderParams pushBrokerReaderParams = new SegmentBrokerReaderParams();
-            pushBrokerReaderParams.init(brokerDesc);
+            pushBrokerReaderParams.init(rootPath, brokerDesc);
             indexToPushBrokerReaderParams.put(indexId, pushBrokerReaderParams);
         }
         return indexToPushBrokerReaderParams.get(indexId);
@@ -316,6 +317,7 @@ public class SegmentLoadJob extends BulkLoadJob {
     private void unprotectedPrepareLoadingInfos(SegmentPendingTaskAttachment attachment) throws LoadException {
         this.tabletMetaToDataFileInfo = attachment.getTabletMetaToDataFileInfo();
         this.tabletMetaToSchemaFilePath = attachment.getTabletMetaToSchemaFilePath();
+        this.rootPath = attachment.getRootPath();
 
         for (String tabletMetaStr : tabletMetaToDataFileInfo.keySet()) {
             String[] fileNameArr = tabletMetaStr.split("/");

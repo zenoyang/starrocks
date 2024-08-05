@@ -362,7 +362,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
                 break;
             }
             if (task.push_req.push_type == TPushType::LOAD_V2 || task.push_req.push_type == TPushType::DELETE ||
-                task.push_req.push_type == TPushType::CANCEL_DELETE) {
+                task.push_req.push_type == TPushType::CANCEL_DELETE || task.push_req.push_type == TPushType::LOAD_SEGMENT) {
                 push_divider[task.push_req.push_type].push_back(&task);
             } else {
                 ret_st = Status::InvalidArgument(
@@ -518,6 +518,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             auto all_push_tasks = push_item.second;
             switch (push_type) {
             case TPushType::LOAD_V2:
+            case TPushType::LOAD_SEGMENT:
                 _push_workers->submit_tasks(all_push_tasks);
                 break;
             case TPushType::DELETE:

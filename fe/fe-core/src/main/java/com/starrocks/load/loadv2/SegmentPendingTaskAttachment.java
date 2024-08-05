@@ -28,6 +28,8 @@ public class SegmentPendingTaskAttachment extends TaskAttachment {
     // { tableId/partitionId/indexId/tabletId -> FilePath }
     private final Map<String, String> tabletMetaToSchemaFilePath = Maps.newHashMap();
 
+    private String rootPath;
+
     public SegmentPendingTaskAttachment(long taskId) {
         super(taskId);
     }
@@ -46,5 +48,13 @@ public class SegmentPendingTaskAttachment extends TaskAttachment {
 
     public Map<String, String> getTabletMetaToSchemaFilePath() {
         return tabletMetaToSchemaFilePath;
+    }
+
+    public String getRootPath() {
+        return rootPath;
+    }
+
+    public void setRootPath(String rootPath) {
+        this.rootPath = rootPath;
     }
 }
