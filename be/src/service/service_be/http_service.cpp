@@ -262,9 +262,9 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/query_cache/{action}", query_cache_action);
     _http_handlers.emplace_back(query_cache_action);
 
-    auto* datacache_action = new DataCacheAction(_env);
-    _ev_http_server->register_handler(HttpMethod::GET, "/api/datacache/{action}", datacache_action);
-    _http_handlers.emplace_back(datacache_action);
+    // auto* datacache_action = new DataCacheAction(_env);
+    // _ev_http_server->register_handler(HttpMethod::GET, "/api/datacache/{action}", datacache_action);
+    // _http_handlers.emplace_back(datacache_action);
 
     auto* pipeline_driver_poller_action = new PipelineBlockingDriversAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/pipeline_blocking_drivers/{action}",
