@@ -141,7 +141,7 @@ public class LoadMgr implements Writable {
         } finally {
             writeUnlock();
         }
-        // GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
 
         // The job must be submitted after edit log.
         // It guarantee that load job has not been changed before edit log.
@@ -246,7 +246,7 @@ public class LoadMgr implements Writable {
         }
         addLoadJob(loadJob);
         // persistent
-        // GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
         return loadJob.getId();
     }
 

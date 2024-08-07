@@ -128,6 +128,7 @@ import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.loadv2.MiniLoadTxnCommitAttachment;
+import com.starrocks.load.loadv2.SegmentLoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.load.routineload.KafkaProgress;
@@ -335,6 +336,7 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory.of(LoadJob.class, "clazz")
                     .registerSubtype(InsertLoadJob.class, "InsertLoadJob")
                     .registerSubtype(SparkLoadJob.class, "SparkLoadJob")
+                    .registerSubtype(SegmentLoadJob.class, "SegmentLoadJob")
                     .registerSubtype(BrokerLoadJob.class, "BrokerLoadJob");
 
     public static final RuntimeTypeAdapterFactory<TxnCommitAttachment> TXN_COMMIT_ATTACHMENT_TYPE_RUNTIME_ADAPTER_FACTORY =
