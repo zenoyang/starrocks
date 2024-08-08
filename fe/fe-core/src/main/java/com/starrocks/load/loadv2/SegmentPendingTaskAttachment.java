@@ -20,11 +20,13 @@ package com.starrocks.load.loadv2;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class SegmentPendingTaskAttachment extends TaskAttachment {
-    // { tableId/partitionId/indexId/tabletId -> (FilePath, FileSize) }
-    private final Map<String, Pair<String, Long>> tabletMetaToDataFileInfo = Maps.newHashMap();
+    // { tableId/partitionId/indexId/tabletId -> [(FilePath, FileSize),...] }
+    private final Map<String, List<Pair<String, Long>>> tabletMetaToDataFileInfo = Maps.newHashMap();
     // { tableId/partitionId/indexId/tabletId -> FilePath }
     private final Map<String, String> tabletMetaToSchemaFilePath = Maps.newHashMap();
 
@@ -35,14 +37,17 @@ public class SegmentPendingTaskAttachment extends TaskAttachment {
     }
 
     public void addDataFileInfo(String tabletMeta, Pair<String, Long> fileInfo) {
-        tabletMetaToDataFileInfo.put(tabletMeta, fileInfo);
+        if (!tabletMetaToDataFileInfo.containsKey(tabletMeta)) {
+            tabletMetaToDataFileInfo.put(tabletMeta, new ArrayList<>());
+        }
+        tabletMetaToDataFileInfo.get(tabletMeta).add(fileInfo);
     }
 
     public void addSchemaFilePath(String tabletMeta, String filePath) {
         tabletMetaToSchemaFilePath.put(tabletMeta, filePath);
     }
 
-    public Map<String, Pair<String, Long>> getTabletMetaToDataFileInfo() {
+    public Map<String, List<Pair<String, Long>>> getTabletMetaToDataFileInfo() {
         return tabletMetaToDataFileInfo;
     }
 

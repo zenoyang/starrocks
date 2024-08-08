@@ -57,6 +57,8 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.PushTask;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
+import com.starrocks.thrift.TFileFormatType;
+import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPriority;
 import com.starrocks.thrift.TPushType;
@@ -84,7 +86,7 @@ public class SegmentLoadJob extends BulkLoadJob {
     private static final Logger LOG = LogManager.getLogger(SegmentLoadJob.class);
 
     // --- members below not persist ---
-    private Map<String, Pair<String, Long>> tabletMetaToDataFileInfo = null;
+    private Map<String, List<Pair<String, Long>>> tabletMetaToDataFileInfo = null;
     private Map<String, String> tabletMetaToSchemaFilePath = null;
     private final Map<Long, Set<Long>> tableToLoadPartitions = Maps.newHashMap();
 
@@ -147,20 +149,30 @@ public class SegmentLoadJob extends BulkLoadJob {
             // update filePath fileSize
             TBrokerScanRange tBrokerScanRange =
                     new TBrokerScanRange(params.tBrokerScanRange);
-            TBrokerRangeDesc tBrokerRangeDesc = tBrokerScanRange.getRanges().get(0);
-            tBrokerRangeDesc.setPath("");
-            tBrokerRangeDesc.setStart_offset(0);
-            tBrokerRangeDesc.setSize(0);
-            tBrokerRangeDesc.setFile_size(-1);
-            tBrokerRangeDesc.setSchema_path("");
             if (tabletMetaToDataFileInfo.containsKey(tabletMetaStr)
                     && tabletMetaToSchemaFilePath.containsKey(tabletMetaStr)) {
-                Pair<String, Long> fileInfo = tabletMetaToDataFileInfo.get(tabletMetaStr);
-                tBrokerRangeDesc.setPath(fileInfo.first);
+                List<Pair<String, Long>> fileInfoList = tabletMetaToDataFileInfo.get(tabletMetaStr);
+                for (Pair<String, Long> fileInfo : fileInfoList) {
+                    TBrokerRangeDesc tBrokerRangeDesc = new TBrokerRangeDesc();
+                    tBrokerRangeDesc.setFile_type(TFileType.FILE_BROKER);
+                    tBrokerRangeDesc.setFormat_type(TFileFormatType.FORMAT_STARROCKS);
+                    tBrokerRangeDesc.setSplittable(false);
+                    tBrokerRangeDesc.setStart_offset(0);
+
+                    tBrokerRangeDesc.setPath(fileInfo.first);
+                    tBrokerRangeDesc.setSize(fileInfo.second);
+                    tBrokerRangeDesc.setFile_size(fileInfo.second);
+                    tBrokerRangeDesc.setSchema_path(tabletMetaToSchemaFilePath.get(tabletMetaStr));
+                    tBrokerScanRange.addToRanges(tBrokerRangeDesc);
+                }
+            } else {
+                TBrokerRangeDesc tBrokerRangeDesc = new TBrokerRangeDesc();
+                tBrokerRangeDesc.setPath("");
                 tBrokerRangeDesc.setStart_offset(0);
-                tBrokerRangeDesc.setSize(fileInfo.second);
-                tBrokerRangeDesc.setFile_size(fileInfo.second);
-                tBrokerRangeDesc.setSchema_path(tabletMetaToSchemaFilePath.get(tabletMetaStr));
+                tBrokerRangeDesc.setSize(0);
+                tBrokerRangeDesc.setFile_size(-1);
+                tBrokerRangeDesc.setSchema_path("");
+                tBrokerScanRange.addToRanges(tBrokerRangeDesc);
             }
 
             // update broker address
@@ -169,13 +181,6 @@ public class SegmentLoadJob extends BulkLoadJob {
                         brokerDesc.getName(), backend.getHost());
                 tBrokerScanRange.getBroker_addresses().add(
                         new TNetworkAddress(fsBroker.ip, fsBroker.port));
-                LOG.debug("push task for replica {}, broker {}:{}, backendId {}," +
-                                "filePath {}, fileSize {}", replicaId, fsBroker.ip, fsBroker.port,
-                        backend.getId(), tBrokerRangeDesc.path, tBrokerRangeDesc.file_size);
-            } else {
-                LOG.debug("push task for replica {}, backendId {}, filePath {}, fileSize {}",
-                        replicaId, backend.getId(), tBrokerRangeDesc.path,
-                        tBrokerRangeDesc.file_size);
             }
 
             PushTask pushTask = new PushTask(backendId, dbId, tableId, partitionId, indexId, tabletId, replicaId,
@@ -305,6 +310,7 @@ public class SegmentLoadJob extends BulkLoadJob {
             unprotectedPrepareLoadingInfos(attachment);
             submitPushTasks();
             unprotectedUpdateState(JobState.LOADING);
+            startLoad = true;
         } catch (Exception e) {
             LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
                     .add("database_id", dbId)

@@ -195,7 +195,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // only for persistence param. see readFields() for usage
     private boolean isJobTypeRead = false;
 
-    private boolean startLoad = false;
+    protected boolean startLoad = false;
 
     // only for log replay
     public LoadJob() {
@@ -473,7 +473,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         beginTxn();
         unprotectedExecuteJob();
         // update spark load job state from PENDING to ETL when pending task is finished
-        if (jobType != EtlJobType.SPARK) {
+        if (jobType != EtlJobType.SPARK && jobType != EtlJobType.SEGMENT_LOAD) {
             unprotectedUpdateState(JobState.LOADING);
         }
     }
@@ -966,6 +966,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             job = new SparkLoadJob();
         } else if (type == EtlJobType.INSERT) {
             job = new InsertLoadJob();
+        } else if (type == EtlJobType.SEGMENT_LOAD) {
+            job = new SegmentLoadJob();
         } else {
             throw new IOException("Unknown load type: " + type.name());
         }

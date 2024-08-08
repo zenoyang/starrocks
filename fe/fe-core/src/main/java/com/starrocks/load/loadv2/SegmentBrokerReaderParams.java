@@ -19,11 +19,8 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
-import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
-import com.starrocks.thrift.TFileFormatType;
-import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.THdfsProperties;
 
 /**
@@ -59,15 +56,5 @@ public class SegmentBrokerReaderParams {
 
         // broker address updated for each replica
         tBrokerScanRange.setBroker_addresses(Lists.newArrayList());
-
-        // broker range desc
-        TBrokerRangeDesc tBrokerRangeDesc = new TBrokerRangeDesc();
-        tBrokerRangeDesc.setFile_type(TFileType.FILE_BROKER);
-        tBrokerRangeDesc.setFormat_type(TFileFormatType.FORMAT_STARROCKS);
-        tBrokerRangeDesc.setSplittable(false);
-        tBrokerRangeDesc.setStart_offset(0);
-        tBrokerRangeDesc.setSize(-1);
-        // path and file size updated for each replica
-        tBrokerScanRange.setRanges(Lists.newArrayList(tBrokerRangeDesc));
     }
 }

@@ -102,6 +102,7 @@ public class SegmentLoadPendingTask extends LoadTask {
             }
             String filePath = fileStatus.getPath();
             // tableId/partitionId/indexId/tabletId/data/uuid_0.dat
+            // tableId/partitionId/indexId/tabletId/data/uuid_1.dat
             // tableId/partitionId/indexId/tabletId/tablet.schema
             String relativePath = filePath.substring(filePath.indexOf(String.valueOf(tableId)));
 
