@@ -54,7 +54,8 @@ StarRocksFormatWriter::StarRocksFormatWriter(int64_t tablet_id, std::shared_ptr<
         }
     }
     _max_rows_per_segment =
-            getIntOrDefault(_options, "starrocks.format.rows_per_segment", std::numeric_limits<uint32_t>::max());
+            getIntOrDefault(_options, "starrocks.format.rows.per.segment", std::numeric_limits<uint32_t>::max());
+    std::cout << "_max_rows_per_segment = " << _max_rows_per_segment << std::endl;
 }
 
 Status StarRocksFormatWriter::open() {
@@ -143,6 +144,7 @@ Status StarRocksFormatWriter::finish_txn_log() {
 
 Status StarRocksFormatWriter::finish_schema_pb() {
     std::string tablet_schema_path = _tablet_root_path + "/tablet.schema";
+    std::cout << "AA = finish_schema_pb" << std::endl;
 
     if (_tablet_schema) {
         std::shared_ptr<TabletSchemaPB> pb = std::make_shared<TabletSchemaPB>();
@@ -154,13 +156,14 @@ Status StarRocksFormatWriter::finish_schema_pb() {
         for (auto& f : _tablet_writer->files()) {
             if (is_segment(f.path)) {
                 string source = _tablet_root_path + "/data/" + f.path;
-                string target = _tablet_root_path + "/data/" + uuid + "_" + std::to_string(index) + ".dat";
-                std::cout << "AA = " << source << std::endl;
-                std::cout << "AA = " << target << std::endl;
-                RETURN_IF_ERROR(fs->rename_file(source, target));
-                string target_pb = target + ".pb";
+                // string target = _tablet_root_path + "/data/" + uuid + "_" + std::to_string(index) + ".dat";
+                std::cout << "AAsource = " << source << std::endl;
+                // std::cout << "AAtarget = " << target << std::endl;
+                // RETURN_IF_ERROR(fs->rename_file(source, target));
+                string target_pb = source + ".pb";
                 ProtobufFile pb_file(target_pb, fs);
-                _segment_pbs[index]->set_path(target);
+                // _segment_pbs[index]->set_path(target);
+                _segment_pbs[index]->set_segment_id(index);
                 if (index == 0) {
                     _segment_pbs[index]->set_num_rows(_tablet_writer->num_rows());
                     _segment_pbs[index]->set_row_size(_total_row_size);

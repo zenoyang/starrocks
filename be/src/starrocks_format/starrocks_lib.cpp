@@ -78,6 +78,7 @@ void initialize_config() {
     starrocks::config::disable_storage_page_cache = "true";
     starrocks::config::mem_limit = "4194304";
     starrocks::config::chunk_reserved_bytes_limit = 4194304;
+    starrocks::config::max_segment_file_size = 268435456;
 }
 
 void starrocks_format_initialize(void) {
