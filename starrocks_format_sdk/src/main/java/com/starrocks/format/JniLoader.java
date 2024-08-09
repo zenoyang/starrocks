@@ -43,13 +43,19 @@ public class JniLoader {
         LOG.info("begin load native StarRocks format library.");
         long start = System.currentTimeMillis();
         try {
+            // load libhdfs.so.0.0.0
+            // Resolve the library file name with a suffix (e.g., dll, .so, etc.)
+            String nativeLibName = System.mapLibraryName("hdfs") + ".0.0.0";
+            File nativeLibFile = findNativeLibrary(nativeLibName, version);
+            System.load(nativeLibFile.getAbsolutePath());
+  
             // load libstarrocks_format.so
-            String nativeLibName = System.getProperty(KEY_STARROCKS_FORMAT_JNI_LIB_NAME);
+            nativeLibName = System.getProperty(KEY_STARROCKS_FORMAT_JNI_LIB_NAME);
             // Resolve the library file name with a suffix (e.g., dll, .so, etc.)
             if (nativeLibName == null) {
                 nativeLibName = System.mapLibraryName("starrocks_format");
             }
-            File nativeLibFile = findNativeLibrary(nativeLibName, version);
+            nativeLibFile = findNativeLibrary(nativeLibName, version);
             System.load(nativeLibFile.getAbsolutePath());
 
             // load starrocks_format_wrapper.so
