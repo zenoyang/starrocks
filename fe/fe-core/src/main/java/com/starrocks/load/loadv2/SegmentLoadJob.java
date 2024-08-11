@@ -167,6 +167,9 @@ public class SegmentLoadJob extends BulkLoadJob {
                 }
             } else {
                 TBrokerRangeDesc tBrokerRangeDesc = new TBrokerRangeDesc();
+                tBrokerRangeDesc.setFile_type(TFileType.FILE_BROKER);
+                tBrokerRangeDesc.setFormat_type(TFileFormatType.FORMAT_STARROCKS);
+                tBrokerRangeDesc.setSplittable(false);
                 tBrokerRangeDesc.setPath("");
                 tBrokerRangeDesc.setStart_offset(0);
                 tBrokerRangeDesc.setSize(0);
