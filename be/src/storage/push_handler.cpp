@@ -394,28 +394,30 @@ Status PushHandler::_load_segment(const TabletSharedPtr& cur_tablet, RowsetShare
         return Status::InternalError("Fail to init rowset writer");
     }
     auto fs_options = FSOptions(&_request.broker_scan_range.params);
-    // 2. Init remote fs and check the schema to avoid schema conflict
-    {
-        std::string path = _request.broker_scan_range.ranges[0].schema_path;
-        LOG(INFO) << "tablet=" << cur_tablet->full_name() << ", schema file path=" << path;
 
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(path, fs_options));
-        TabletMetaPB tabletMetaPb;
-        ProtobufFile proto_file(path, std::move(fs));
-        RETURN_IF_ERROR(proto_file.load(&tabletMetaPb));
-        LOG(INFO) << "tablet schema = " << tabletMetaPb.DebugString();
-    }
+    std::string schema_path = _request.broker_scan_range.ranges[0].schema_path;
+    if (!schema_path.empty()) {
+        // 2. Init remote fs and check the schema to avoid schema conflict
+        {
+            LOG(INFO) << "tablet=" << cur_tablet->full_name() << ", schema file path=" << schema_path;
 
-    // 3. Download the remote file to load disk
-    for (auto & range: _request.broker_scan_range.ranges) {
-        std::string file = range.path;
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(file, fs_options));
-        ASSIGN_OR_RETURN(auto rfile, fs->new_sequential_file(file));
-        std::string pb_file = file + ".pb";
-        SegmentPB segment_pb;
-        ProtobufFile proto_file(pb_file, std::move(fs));
-        RETURN_IF_ERROR(proto_file.load(&segment_pb));
-        RETURN_IF_ERROR(rowset_writer->download_segment(segment_pb, std::move(rfile)));
+            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(schema_path, fs_options));
+            TabletMetaPB tabletMetaPb;
+            ProtobufFile proto_file(schema_path, std::move(fs));
+            RETURN_IF_ERROR(proto_file.load(&tabletMetaPb));
+            LOG(INFO) << "tablet schema = " << tabletMetaPb.DebugString();
+        }
+        // 3. Download the remote file to load disk
+        for (auto& range : _request.broker_scan_range.ranges) {
+            std::string file = range.path;
+            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(file, fs_options));
+            ASSIGN_OR_RETURN(auto rfile, fs->new_sequential_file(file));
+            std::string pb_file = file + ".pb";
+            SegmentPB segment_pb;
+            ProtobufFile proto_file(pb_file, std::move(fs));
+            RETURN_IF_ERROR(proto_file.load(&segment_pb));
+            RETURN_IF_ERROR(rowset_writer->download_segment(segment_pb, std::move(rfile)));
+        }
     }
 
     // 4. finish
