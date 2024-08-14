@@ -15,8 +15,8 @@
 #include "storage/push_handler.h"
 
 #include "storage/compaction_manager.h"
-#include "storage/rowset/rowset_factory.h"
 #include "storage/protobuf_file.h"
+#include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/schema_change.h"
@@ -402,10 +402,31 @@ Status PushHandler::_load_segment(const TabletSharedPtr& cur_tablet, RowsetShare
             LOG(INFO) << "tablet=" << cur_tablet->full_name() << ", schema file path=" << schema_path;
 
             ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(schema_path, fs_options));
-            TabletMetaPB tabletMetaPb;
+            TabletSchemaPB tabletSchemaPB;
             ProtobufFile proto_file(schema_path, std::move(fs));
-            RETURN_IF_ERROR(proto_file.load(&tabletMetaPb));
-            LOG(INFO) << "tablet schema = " << tabletMetaPb.DebugString();
+            RETURN_IF_ERROR(proto_file.load(&tabletSchemaPB));
+            LOG(INFO) << "tablet schema = " << tabletSchemaPB.DebugString();
+            auto cur_tablet_schema = cur_tablet->tablet_schema();
+            if (cur_tablet_schema->num_columns() != tabletSchemaPB.column_size()) {
+                LOG(WARNING) << "Tablet: " << cur_tablet->tablet_id() << " has different column size "
+                             << cur_tablet_schema->num_columns() << " vs " << tabletSchemaPB.column_size() << ".";
+                return Status::InternalError("Tablet has different columns size.");
+            }
+
+            for (size_t i = 0; i < cur_tablet_schema->num_columns(); i++) {
+                if (cur_tablet_schema->column(i).name() != tabletSchemaPB.column(i).name()) {
+                    LOG(WARNING) << "Tablet: " << cur_tablet->tablet_id() << " has different column name "
+                                 << cur_tablet_schema->column(i).name() << " vs " << tabletSchemaPB.column(i).name()
+                                 << ".";
+                    return Status::InternalError("Tablet has different columns name.");
+                }
+                if (logical_type_to_string(cur_tablet_schema->column(i).type()) != tabletSchemaPB.column(i).type()) {
+                    LOG(WARNING) << "Tablet: " << cur_tablet->tablet_id() << " has different column type "
+                                 << logical_type_to_string(cur_tablet_schema->column(i).type()) << " vs "
+                                 << tabletSchemaPB.column(i).type() << ".";
+                    return Status::InternalError("Tablet has different columns type.");
+                }
+            }
         }
         // 3. Download the remote file to load disk
         for (auto& range : _request.broker_scan_range.ranges) {

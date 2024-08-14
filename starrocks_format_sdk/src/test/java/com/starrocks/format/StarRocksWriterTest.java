@@ -34,10 +34,14 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Date;
 import java.sql.Timestamp;
@@ -45,8 +49,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -216,8 +222,16 @@ public class StarRocksWriterTest extends BaseFormatTest {
         writer.finish();
         writer.close();
         writer.release();
-        System.out.println(tabletRootPath);
-        Thread.sleep(100000);
+        File tabletSchemaFile= new File(tabletRootPath + "/tablet.schema");
+        assertTrue(tabletSchemaFile.exists());
+        TabletSchemaPB pb = TabletSchemaPB.parseFrom(Files.newInputStream(tabletSchemaFile.toPath()));
+        System.out.println(schema);
+        System.out.println(pb);
+        assertEquals(schema.toString(), pb.toString());
+        assertEquals(2, Objects.requireNonNull(dir.listFiles()).length);
+        for (File f: Objects.requireNonNull(dir.listFiles())) {
+            assertTrue(f.toString().endsWith(".dat") || f.toString().endsWith(".pb"));
+        }
     }
 
     @Test

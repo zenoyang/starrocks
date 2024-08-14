@@ -38,6 +38,7 @@ StarRocksFormatWriter::StarRocksFormatWriter(int64_t tablet_id, std::shared_ptr<
           _txn_id(txn_id),
           _tablet_root_path(tablet_root_path),
           _options(options) {
+
     _provider = std::make_shared<FixedLocationProvider>(tablet_root_path);
 
     _writer_type = WriterType::kHorizontal;
@@ -55,7 +56,6 @@ StarRocksFormatWriter::StarRocksFormatWriter(int64_t tablet_id, std::shared_ptr<
     }
     _max_rows_per_segment =
             getIntOrDefault(_options, "starrocks.format.rows.per.segment", std::numeric_limits<uint32_t>::max());
-    std::cout << "_max_rows_per_segment = " << _max_rows_per_segment << std::endl;
 }
 
 Status StarRocksFormatWriter::open() {
@@ -144,7 +144,6 @@ Status StarRocksFormatWriter::finish_txn_log() {
 
 Status StarRocksFormatWriter::finish_schema_pb() {
     std::string tablet_schema_path = _tablet_root_path + "/tablet.schema";
-    std::cout << "AA = finish_schema_pb" << std::endl;
 
     if (_tablet_schema) {
         std::shared_ptr<TabletSchemaPB> pb = std::make_shared<TabletSchemaPB>();
@@ -155,12 +154,8 @@ Status StarRocksFormatWriter::finish_schema_pb() {
         string uuid = generate_uuid_string();
         for (auto& f : _tablet_writer->files()) {
             if (is_segment(f.path)) {
-                string source = _tablet_root_path + "/data/" + f.path;
-                // string target = _tablet_root_path + "/data/" + uuid + "_" + std::to_string(index) + ".dat";
-                std::cout << "AAsource = " << source << std::endl;
-                // std::cout << "AAtarget = " << target << std::endl;
-                // RETURN_IF_ERROR(fs->rename_file(source, target));
-                string target_pb = source + ".pb";
+                string dat_file = _tablet_root_path + "/data/" + f.path;
+                string target_pb = dat_file + ".pb";
                 ProtobufFile pb_file(target_pb, fs);
                 // _segment_pbs[index]->set_path(target);
                 _segment_pbs[index]->set_segment_id(index);
@@ -169,7 +164,7 @@ Status StarRocksFormatWriter::finish_schema_pb() {
                     _segment_pbs[index]->set_row_size(_total_row_size);
                 }
                 RETURN_IF_ERROR(pb_file.save(*_segment_pbs[index]));
-                std::cout << "AA = " << _segment_pbs[index]->DebugString() << std::endl;
+                LOG(INFO) << "Write file to the dfs: " << _segment_pbs[index]->DebugString();
                 index++;
 
             } else {
