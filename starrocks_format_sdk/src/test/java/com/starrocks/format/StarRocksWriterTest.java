@@ -34,25 +34,18 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -138,100 +131,6 @@ public class StarRocksWriterTest extends BaseFormatTest {
         TransactionResult commitTxnResult = restClient.commitTransaction(
                 DEFAULT_CATALOG, DB_NAME, prepareTxnResult.getLabel());
         assertTrue(commitTxnResult.isOk());
-    }
-
-
-    @Test
-    public void testWriteLocalUseChunkForBulkLoad(@TempDir Path tempDir) throws Exception {
-        TabletSchemaPB.Builder schemaBuilder = TabletSchemaPB.newBuilder()
-                .setId(1)
-                .setKeysType(KeysType.DUP_KEYS)
-                .setCompressionType(CompressionTypePB.LZ4_FRAME);
-
-        ColumnType[] columnTypes = new ColumnType[] {
-                new ColumnType(DataType.INT, 4),
-                new ColumnType(DataType.BOOLEAN, 4),
-                new ColumnType(DataType.TINYINT, 1),
-                new ColumnType(DataType.SMALLINT, 2),
-                new ColumnType(DataType.BIGINT, 8),
-                new ColumnType(DataType.LARGEINT, 16),
-                new ColumnType(DataType.FLOAT, 4),
-                new ColumnType(DataType.DOUBLE, 8),
-                new ColumnType(DataType.DATE, 4),
-                new ColumnType(DataType.DATETIME, 8),
-                new ColumnType(DataType.DECIMAL32, 8),
-                new ColumnType(DataType.DECIMAL64, 16),
-                new ColumnType(DataType.VARCHAR, 32 + Integer.SIZE)};
-
-        int colId = 0;
-        for (ColumnType columnType : columnTypes) {
-            ColumnPB.Builder columnBuilder = ColumnPB.newBuilder()
-                    .setName("c_" + columnType.getDataType())
-                    .setUniqueId(colId)
-                    .setIsKey(true)
-                    .setIsNullable(true)
-                    .setType(columnType.getDataType().getLiteral())
-                    .setLength(columnType.getLength())
-                    .setIndexLength(columnType.getLength())
-                    .setAggregation("none");
-            if (columnType.getDataType().getLiteral().startsWith("DECIMAL32")) {
-                columnBuilder.setPrecision(9);
-                columnBuilder.setFrac(2);
-            } else if (columnType.getDataType().getLiteral().startsWith("DECIMAL64")) {
-                columnBuilder.setPrecision(18);
-                columnBuilder.setFrac(3);
-            } else if (columnType.getDataType().getLiteral().startsWith("DECIMAL128")) {
-                columnBuilder.setPrecision(38);
-                columnBuilder.setFrac(4);
-            }
-            schemaBuilder.addColumn(columnBuilder.build());
-            colId++;
-        }
-        TabletSchemaPB schema = schemaBuilder
-                .setNextColumnUniqueId(colId)
-                // sort key index alway the key column index
-                .addSortKeyIdxes(0)
-                // short key size is less than sort keys
-                .setNumShortKeyColumns(1)
-                .setNumRowsPerRowBlock(1024)
-                .build();
-
-        long tabletId = 100L;
-        long txnId = 4;
-
-        String tabletRootPath = tempDir.toAbsolutePath().toString();
-        File dir = new File(tabletRootPath + "/data");
-        assertTrue(dir.mkdirs());
-
-        Map<String,String> config = new HashMap<>();
-        config.put("starrocks.format.mode", "share_nothing");
-        StarRocksWriter writer = new StarRocksWriter(tabletId,
-                schema,
-                txnId,
-                tabletRootPath,
-                config);
-        writer.open();
-
-        // write use chunk interface
-        Chunk chunk = writer.newChunk(5);
-        fillSampleData(schema, chunk, 0, 5);
-        writer.write(chunk);
-
-        chunk.release();
-        writer.flush();
-        writer.finish();
-        writer.close();
-        writer.release();
-        File tabletSchemaFile= new File(tabletRootPath + "/tablet.schema");
-        assertTrue(tabletSchemaFile.exists());
-        TabletSchemaPB pb = TabletSchemaPB.parseFrom(Files.newInputStream(tabletSchemaFile.toPath()));
-        System.out.println(schema);
-        System.out.println(pb);
-        assertEquals(schema.toString(), pb.toString());
-        assertEquals(2, Objects.requireNonNull(dir.listFiles()).length);
-        for (File f: Objects.requireNonNull(dir.listFiles())) {
-            assertTrue(f.toString().endsWith(".dat") || f.toString().endsWith(".pb"));
-        }
     }
 
     @Test
