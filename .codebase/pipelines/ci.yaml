@@ -27,7 +27,7 @@ jobs:
           - sh run-be-ut.sh --use-staros -j 12
 
 
-starrocks_format_sdk:
+  starrocks_format_sdk:
     image:  hub.byted.org/compile/emr-starrocks-lh-3.2-builder:2c266cb90107e5a861524f2852363b40
     working-directory: emr-core/StarRocks
     runs-on:
@@ -39,7 +39,7 @@ starrocks_format_sdk:
           - cp .codebase/settings.xml /root/.m2/
           - sh .codebase/run-sr-format-sdk-test.sh
 
-starrocks_segment_export:
+  starrocks_segment_export:
     image:  hub.byted.org/compile/emr-starrocks-lh-3.2-builder:2c266cb90107e5a861524f2852363b40
     working-directory: emr-core/StarRocks
     runs-on:
