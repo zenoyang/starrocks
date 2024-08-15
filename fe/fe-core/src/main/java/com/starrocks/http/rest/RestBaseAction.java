@@ -70,6 +70,7 @@ public class RestBaseAction extends BaseAction {
 
     protected static final String PAGE_NUM_KEY = "page_num";
     protected static final String PAGE_SIZE_KEY = "page_size";
+    protected static final String FETCH_ALL = "fetch_all";
 
     protected static final int DEFAULT_PAGE_NUM = 0;
     protected static final int DEFAULT_PAGE_SIZE = 100;

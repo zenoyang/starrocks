@@ -93,6 +93,7 @@ public class TablePartitionAction extends RestBaseAction {
         boolean temporary = getParameter(request, TEMPORARY_KEY, false, BooleanUtils::toBoolean);
         int pageNum = getPageNum(request);
         int pageSize = getPageSize(request);
+        boolean fetchAll = getParameter(request, FETCH_ALL, false, BooleanUtils::toBoolean);
 
         PagedResult<TablePartitionView> pagedResult = new PagedResult<>();
         pagedResult.setPageNum(pageNum);
@@ -105,17 +106,29 @@ public class TablePartitionAction extends RestBaseAction {
         Collection<Partition> partitions =
                 temporary ? olapTable.getTempPartitions() : olapTable.getPartitions();
         if (CollectionUtils.isNotEmpty(partitions)) {
-            int pages = partitions.size() / pageSize;
-            pagedResult.setPages(partitions.size() % pageSize == 0 ? pages : (pages + 1));
             pagedResult.setTotal(partitions.size());
-            pagedResult.setItems(partitions.stream()
-                    .sorted(Comparator.comparingLong(Partition::getId))
-                    .skip((long) pageNum * pageSize)
-                    .limit(pageSize)
-                    .map(partition ->
-                            TablePartitionView.createFrom(olapTable.getPartitionInfo(), partition))
-                    .collect(Collectors.toList())
-            );
+            if (fetchAll) {
+                pagedResult.setPageNum(0);
+                pagedResult.setPages(1);
+                pagedResult.setPageSize(partitions.size());
+                pagedResult.setItems(partitions.stream()
+                        .sorted(Comparator.comparingLong(Partition::getId))
+                        .map(partition ->
+                                TablePartitionView.createFrom(olapTable.getPartitionInfo(), partition))
+                        .collect(Collectors.toList())
+                );
+            } else {
+                int pages = partitions.size() / pageSize;
+                pagedResult.setPages(partitions.size() % pageSize == 0 ? pages : (pages + 1));
+                pagedResult.setItems(partitions.stream()
+                        .sorted(Comparator.comparingLong(Partition::getId))
+                        .skip((long) pageNum * pageSize)
+                        .limit(pageSize)
+                        .map(partition ->
+                                TablePartitionView.createFrom(olapTable.getPartitionInfo(), partition))
+                        .collect(Collectors.toList())
+                );
+            }
         }
 
         sendResult(request, response, RestBaseResultV2.ok(pagedResult));
