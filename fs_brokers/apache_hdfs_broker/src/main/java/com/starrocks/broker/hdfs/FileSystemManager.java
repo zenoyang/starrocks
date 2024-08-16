@@ -873,6 +873,10 @@ public class FileSystemManager {
         }
     }
 
+    public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> properties) {
+        return listPath(path, fileNameOnly, properties, false);
+    }
+
     public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> properties,
                                             boolean isRecursive) {
         List<TBrokerFileStatus> resultFileStatus = null;

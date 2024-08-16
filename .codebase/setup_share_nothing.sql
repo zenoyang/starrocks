@@ -1,20 +1,3 @@
-
-CREATE STORAGE VOLUME minio_volume
-TYPE = S3
-LOCATIONS = ("s3://bucket1/starrocks_warehouse/")
-PROPERTIES
-(
-    "enabled" = "true",
-    "aws.s3.region" = "cn-beijing",
-    "aws.s3.endpoint" = "http://127.0.0.1:9000",
-    "aws.s3.use_aws_sdk_default_behavior" = "false",
-    "aws.s3.use_instance_profile" = "false",
-    "aws.s3.access_key" = "minio_access_key",
-    "aws.s3.secret_key" = "minio_secret_key"
-);
-
-SET minio_volume AS DEFAULT STORAGE VOLUME;
-
 create database demo;
 
 use demo;

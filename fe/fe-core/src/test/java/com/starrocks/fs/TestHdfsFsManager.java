@@ -130,8 +130,8 @@ public class TestHdfsFsManager extends TestCase {
 
         // listPath
         Assert.assertEquals(1,
-                hdfsFsManager.listPath("s3a://dir/", true, Maps.newHashMap(), false).size());
+                hdfsFsManager.listPath("s3a://dir/", true, Maps.newHashMap()).size());
         Assert.assertEquals(1,
-                hdfsFsManager.listPath("s3a://dir/", false, Maps.newHashMap(), false).size());
+                hdfsFsManager.listPath("s3a://dir/", false, Maps.newHashMap()).size());
     }
 }

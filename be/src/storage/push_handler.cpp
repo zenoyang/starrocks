@@ -449,7 +449,7 @@ Status PushHandler::_load_segment(const TabletSharedPtr& cur_tablet, RowsetShare
 
     _write_bytes += static_cast<int64_t>((*cur_rowset)->data_disk_size());
     _write_rows += static_cast<int64_t>((*cur_rowset)->num_rows());
-    VLOG(10) << "convert delta file end. res=" << st.to_string() << ", tablet=" << cur_tablet->full_name()
+    VLOG(10) << "load segment file end. res=" << st.to_string() << ", tablet=" << cur_tablet->full_name()
              << ", processed_rows" << num_rows;
     return st;
 }

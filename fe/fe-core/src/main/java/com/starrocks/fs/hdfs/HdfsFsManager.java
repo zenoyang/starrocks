@@ -1200,6 +1200,11 @@ public class HdfsFsManager {
         }
     }
 
+    public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties)
+            throws UserException {
+        return listPath(path, fileNameOnly, loadProperties, false);
+    }
+
     public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties,
                                             boolean isRecursive) throws UserException {
         List<TBrokerFileStatus> resultFileStatus = null;

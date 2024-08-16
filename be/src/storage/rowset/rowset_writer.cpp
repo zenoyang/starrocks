@@ -398,7 +398,6 @@ Status RowsetWriter::download_segment(const SegmentPB& segment_pb, std::unique_p
 
     // 2. download segment file
     ASSIGN_OR_RETURN(auto size, fs::copy(rfile.get(), wfile.get(), 1024 * 1024));
-
     DCHECK_EQ(size, segment_pb.data_size());
 
     // 3. update statistic

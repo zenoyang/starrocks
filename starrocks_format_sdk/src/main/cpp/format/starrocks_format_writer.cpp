@@ -55,7 +55,7 @@ StarRocksFormatWriter::StarRocksFormatWriter(int64_t tablet_id, std::shared_ptr<
         }
     }
     _max_rows_per_segment =
-            getIntOrDefault(_options, "starrocks.format.rows.per.segment", std::numeric_limits<uint32_t>::max());
+            getIntOrDefault(_options, "starrocks.format.rows_per_segment", std::numeric_limits<uint32_t>::max());
 }
 
 Status StarRocksFormatWriter::open() {
@@ -157,7 +157,6 @@ Status StarRocksFormatWriter::finish_schema_pb() {
                 string dat_file = _tablet_root_path + "/data/" + f.path;
                 string target_pb = dat_file + ".pb";
                 ProtobufFile pb_file(target_pb, fs);
-                // _segment_pbs[index]->set_path(target);
                 _segment_pbs[index]->set_segment_id(index);
                 if (index == 0) {
                     _segment_pbs[index]->set_num_rows(_tablet_writer->num_rows());
@@ -177,6 +176,7 @@ Status StarRocksFormatWriter::finish_schema_pb() {
         return Status::InternalError("_tablet_schema was not defined");
     }
 }
+
 Status StarRocksFormatWriter::put_txn_log(const TxnLogPtr& log) {
     if (UNLIKELY(!log->has_tablet_id())) {
         return Status::InvalidArgument("txn log does not have tablet id");

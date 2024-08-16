@@ -86,6 +86,11 @@ public class HdfsUtil {
         hdfsService.listPath(request, fileStatuses, skipDir, fileNameOnly);
     }
 
+    public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses,
+                                 boolean skipDir, boolean fileNameOnly) throws UserException {
+        parseFile(path, brokerDesc, fileStatuses, skipDir, fileNameOnly, false);
+    }
+
     public static List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws UserException {
         if (path.startsWith(TableFunctionTable.FAKE_PATH)) {
             path = StringUtils.removeStart(path, TableFunctionTable.FAKE_PATH);
