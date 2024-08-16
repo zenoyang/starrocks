@@ -14,11 +14,11 @@ sh ${STARROCKS_HOME}/build.sh --fe --be --use-staros -j 20
 echo "----------start run start_minio.sh..."
 sh ${STARROCKS_HOME}/.codebase/start_minio.sh
 
-echo "----------start run start_share_noting_mini_cluster.sh..."
-sh ${STARROCKS_HOME}/.codebase/start_share_noting_mini_cluster.sh
+echo "----------start run start_share_nothing_mini_cluster.sh..."
+sh ${STARROCKS_HOME}/.codebase/start_share_nothing_mini_cluster.sh
 exit_code=`echo $?`
 if [ $exit_code -ne 0 ];then
-  echo "----------run start_share_noting_mini_cluster.sh failed ...."
+  echo "----------run start_share_nothing_mini_cluster.sh failed ...."
   exit 1
 fi
 
