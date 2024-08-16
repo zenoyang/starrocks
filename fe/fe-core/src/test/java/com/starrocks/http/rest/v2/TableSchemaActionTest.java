@@ -180,6 +180,14 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
                 List<ColumnView> cols = indexMeta.getColumns();
                 assertEquals(1, cols.size());
                 assertEquals("c1", cols.get(0).getName());
+                assertEquals(testIndexId, indexMeta.getSchemaId());
+                assertEquals(0, indexMeta.getSchemaVersion());
+                assertEquals(1, indexMeta.getShortKeyColumnCount());
+                assertEquals(1, indexMeta.getSortKeyIdxes().size());
+                assertEquals(1, indexMeta.getSortKeyIdxes().size());
+                assertEquals((Integer) 1, indexMeta.getSortKeyIdxes().get(0));
+                assertEquals(1, indexMeta.getSortKeyUniqueIds().size());
+                assertEquals((Integer) 0, indexMeta.getSortKeyUniqueIds().get(0));
             }
 
             PartitionInfoView partitionInfo = tableSchema.getPartitionInfo();
@@ -275,7 +283,7 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
 
         olapTable.setIndexMeta(
                 testIndexId, idx1.getIndexName(), Lists.newArrayList(c1), 0, 0, (short) 1,
-                TStorageType.COLUMN, KeysType.DUP_KEYS
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, Lists.newArrayList(1), Lists.newArrayList(0)
         );
 
         olapTable.setComment("c_" + TB_GET_TABLE_SCHEMA_NAME);
