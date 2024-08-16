@@ -225,6 +225,11 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
             // assertEquals(TB_GET_TABLE_SCHEMA_ID + 65535L, tableSchema.getMaxIndexId().longValue());
             assertEquals(65535, tableSchema.getMaxColUniqueId().intValue());
 
+            // default bp is 0
+            assertEquals(0, Double.compare(0, tableSchema.getBfFpp()));
+            // default compression type
+            assertEquals("LZ4_FRAME", tableSchema.getCompressionType());
+
             Map<String, String> properties = tableSchema.getProperties();
             assertEquals(2, properties.size());
             assertEquals("3", properties.get("replication_num"));
