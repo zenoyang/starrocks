@@ -81,6 +81,7 @@ public class BaseFormatTest {
                 // .setDefaultValue(ByteString.copyFrom(column.getDefaultValue(), StandardCharsets.UTF_8))
                 .setLength(stringLength)
                 .setIndexLength(stringLength)
+                .setUniqueId(column.getUniqueId())
                 .setIsAutoIncrement(Boolean.TRUE.equals(column.getAutoIncrement()));
         if (column.getPrecision() != null) {
             builder.setPrecision(column.getPrecision());
@@ -153,5 +154,4 @@ public class BaseFormatTest {
             this.scale = scale;
         }
     }
-
 }

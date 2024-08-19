@@ -64,6 +64,9 @@ public class ConnSettings {
     @Option("fs.s3a.secret.key")
     private String s3SecretKey = "minio_secret_key";
 
+    @Option("starrocks.format.mode")
+    private String segmentExportEnabled = "share_everything";
+
     private ConnSettings() {
     }
 
@@ -178,6 +181,10 @@ public class ConnSettings {
 
     public void setS3SecretKey(String s3SecretKey) {
         this.s3SecretKey = s3SecretKey;
+    }
+
+    public void setSegmentExportEnabled(String segmentExportEnabled) {
+        this.segmentExportEnabled = segmentExportEnabled;
     }
 
     @Inherited

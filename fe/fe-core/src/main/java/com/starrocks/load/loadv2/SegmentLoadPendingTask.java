@@ -104,6 +104,9 @@ public class SegmentLoadPendingTask extends LoadTask {
             // tableId/partitionId/indexId/tabletId/data/uuid_0.dat
             // tableId/partitionId/indexId/tabletId/data/uuid_1.dat
             // tableId/partitionId/indexId/tabletId/tablet.schema
+            if (!filePath.contains(String.valueOf(tableId))) {
+                continue;
+            }
             String relativePath = filePath.substring(filePath.indexOf(String.valueOf(tableId)));
 
             if (filePath.contains(SPARK_OUTPUT_TABLET_DATA_DIR) && filePath.endsWith(SPARK_OUTPUT_DATA_FILE_SUFFIX)) {
