@@ -20,6 +20,7 @@ package com.starrocks.format.rest.model;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -38,10 +39,10 @@ public class MaterializedIndexMeta {
     private long schemaId;
 
     @JsonProperty("sortKeyIdxes")
-    public List<Integer> sortKeyIdxes;
+    public List<Integer> sortKeyIdxes = new ArrayList<>();
 
     @JsonProperty("sortKeyUniqueIds")
-    public List<Integer> sortKeyUniqueIds;
+    public List<Integer> sortKeyUniqueIds = new ArrayList<>();
 
     @JsonProperty("schemaVersion")
     private int schemaVersion = 0;
