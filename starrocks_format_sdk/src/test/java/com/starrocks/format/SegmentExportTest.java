@@ -23,6 +23,7 @@ import com.starrocks.format.rest.model.TableSchema;
 import com.starrocks.proto.TabletSchema;
 import com.starrocks.proto.Types;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -35,14 +36,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.nio.file.Path;
-import java.sql.Connection;
 import java.sql.Date;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -57,15 +51,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 public class SegmentExportTest extends BaseFormatTest {
-
-    // Driver name for mysql connector 5.1 which is deprecated in 8.0
-    private static final String MYSQL_51_DRIVER_NAME = "com.mysql.jdbc.Driver";
-    // Driver name for mysql connector 8.0
-    private static final String MYSQL_80_DRIVER_NAME = "com.mysql.cj.jdbc.Driver";
-    private static final String MYSQL_SITE_URL = "https://dev.mysql.com/downloads/connector/j/";
-    private static final String MAVEN_CENTRAL_URL = "https://repo1.maven.org/maven2/mysql/mysql-connector-java/";
-
-
     @BeforeAll
     public static void init() throws Exception {
         BaseFormatTest.init();
@@ -87,6 +72,13 @@ public class SegmentExportTest extends BaseFormatTest {
                 Arguments.of("tb_all_primitivetype_write_unique2"),
                 Arguments.of("tb_all_primitivetype_write_aggregate2"),
                 Arguments.of("tb_all_primitivetype_write_primary2")
+        );
+    }
+
+    private static Stream<Arguments> testSchemaChangeTable() {
+        return Stream.of(
+//                Arguments.of("tb_fast_schema_change_table"),
+                Arguments.of("tb_no_fast_schema_change_table")
         );
     }
 
@@ -145,17 +137,16 @@ public class SegmentExportTest extends BaseFormatTest {
             }
         }
 
-        String db = "demo";
         String label = String.format("bypass_write_%s_%s_%s", DB_NAME, tableName, uuid);
         String ak = settings.getS3AccessKey();
         String sk = settings.getS3SecretKey();
         String endpoint = settings.getS3Endpoint();
 
-        loadSegmentData(db, label, stageDir, tableName, ak, sk, endpoint);
-        boolean res = waitUtilLoadFinished(db, label);
+        loadSegmentData(DB_NAME, label, stageDir, tableName, ak, sk, endpoint);
+        boolean res = waitUtilLoadFinished(DB_NAME, label);
         assertTrue(res);
 
-        List<Map<String, String>> outputs = getTableResults(db, tableName, "rowId");
+        List<Map<String, String>> outputs = getTableRowNum(DB_NAME, tableName);
         assertEquals(1, outputs.size());
         assertEquals(400, Integer.valueOf(outputs.get(0).get("num")));
     }
@@ -164,7 +155,6 @@ public class SegmentExportTest extends BaseFormatTest {
     @MethodSource("testAllPrimitiveTypeTwice")
     public void testAllPrimitiveTypeTwice(String tableName) throws Exception {
         int times = 2;
-        String db = "demo";
         for (int i = 0; i < times; i++) {
             String uuid = RandomStringUtils.randomAlphabetic(8);
             String stageDir = "s3a://bucket1/.staging_ut/" + uuid + "/";
@@ -224,12 +214,12 @@ public class SegmentExportTest extends BaseFormatTest {
             String sk = settings.getS3SecretKey();
             String endpoint = settings.getS3Endpoint();
 
-            loadSegmentData(db, label, stageDir, tableName, ak, sk, endpoint);
-            boolean res = waitUtilLoadFinished(db, label);
+            loadSegmentData(DB_NAME, label, stageDir, tableName, ak, sk, endpoint);
+            boolean res = waitUtilLoadFinished(DB_NAME, label);
             assertTrue(res);
         }
 
-        List<Map<String, String>> outputs = getTableResults(db, tableName, "rowId");
+        List<Map<String, String>> outputs = getTableRowNum(DB_NAME, tableName);
         assertEquals(1, outputs.size());
         switch (tableName) {
             case "tb_all_primitivetype_write_duplicate2":
@@ -247,6 +237,84 @@ public class SegmentExportTest extends BaseFormatTest {
             default:
                 fail();
         }
+    }
+
+    @ParameterizedTest
+    @MethodSource("testSchemaChangeTable")
+    public void testSchemaChangeTable(String tableName) throws Exception {
+        String dropColumnTable = String.format("alter table `demo`.`%s` DROP COLUMN c_bigint",tableName);
+        executeSql(dropColumnTable);
+        Assertions.assertTrue(waitAlterTableColumnFinished(tableName));
+
+        String addColumnTable = String.format("alter table `demo`.`%s` ADD COLUMN new_col INT" +
+                " DEFAULT \"0\" AFTER c_datetime", tableName);
+        executeSql(addColumnTable);
+        Assertions.assertTrue(waitAlterTableColumnFinished(tableName));
+
+        String uuid = RandomStringUtils.randomAlphabetic(8);
+        String stageDir = "s3a://bucket1/.staging_ut/" + uuid + "/";
+        TableSchema tableSchema = restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName);
+        Validator.validateSegmentLoadExport(tableSchema);
+        if (!Validator.assignUniqColumnId(tableSchema)) {
+            throw new Exception("Unable to assign unique column id.");
+        }
+        TabletSchema.TabletSchemaPB tabletSchema = toPbTabletSchema(tableSchema);
+
+        List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
+        long tableId = tableSchema.getId();
+        long indexId = tableSchema.getIndexMetas().get(0).getIndexId();
+
+        assertFalse(partitions.isEmpty());
+        for (TablePartition partition : partitions) {
+            List<TablePartition.Tablet> tablets = partition.getTablets();
+            assertFalse(tablets.isEmpty());
+
+            for (TablePartition.Tablet tablet : tablets) {
+                Long tabletId = tablet.getId();
+                try {
+                    String storagePath = stageDir + "/" + tableId + "/" + partition.getId() + "/"
+                            + indexId + "/" + tabletId;
+                    StarRocksWriter writer = new StarRocksWriter(tabletId,
+                            tabletSchema,
+                            -1L,
+                            storagePath,
+                            settings.toMap());
+                    writer.open();
+                    // write use chunk interface
+                    Chunk chunk = writer.newChunk(4096);
+
+                    chunk.reset();
+                    fillSampleData(tabletSchema, chunk, 0, 200);
+                    writer.write(chunk);
+
+                    chunk.reset();
+                    fillSampleData(tabletSchema, chunk, 200, 200);
+                    writer.write(chunk);
+
+                    chunk.release();
+                    writer.flush();
+                    writer.finish();
+                    writer.close();
+                    writer.release();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    fail();
+                }
+            }
+        }
+
+        String label = String.format("bypass_write_%s_%s_%s", DB_NAME, tableName, uuid);
+        String ak = settings.getS3AccessKey();
+        String sk = settings.getS3SecretKey();
+        String endpoint = settings.getS3Endpoint();
+
+        loadSegmentData(DB_NAME, label, stageDir, tableName, ak, sk, endpoint);
+        boolean res = waitUtilLoadFinished(DB_NAME, label);
+        assertTrue(res);
+
+        List<Map<String, String>> outputs = getTableRowNum(DB_NAME, tableName);
+        assertEquals(1, outputs.size());
+        assertEquals(400, Integer.valueOf(outputs.get(0).get("num")));
     }
 
     @Test
@@ -496,7 +564,7 @@ public class SegmentExportTest extends BaseFormatTest {
         }
     }
 
-    public List<Map<String, String>> getTableResults(String db, String table, String orderColumn) {
+    public List<Map<String, String>> getTableRowNum(String db, String table) {
         String queryStmt = String.format("select count(*) as num from `%s`.`%s`;", db, table);
         return executeSqlWithReturn(queryStmt, new ArrayList<>());
     }
@@ -553,75 +621,5 @@ public class SegmentExportTest extends BaseFormatTest {
             throw new RuntimeException(e);
         }
         return false;
-    }
-
-    private List<Map<String, String>> executeSqlWithReturn(String sqlPattern, List<String> parameters) {
-        List<Map<String, String>> columnValues = new ArrayList<>();
-        try (
-                Connection conn = createJdbcConnection();
-                PreparedStatement ps = conn.prepareStatement(sqlPattern)
-        ) {
-            for (int i = 1; i <= parameters.size(); i++) {
-                ps.setObject(i, parameters.get(i - 1));
-            }
-
-            ResultSet rs = ps.executeQuery();
-            ResultSetMetaData metaData = rs.getMetaData();
-            int columnCount = metaData.getColumnCount();
-            while (rs.next()) {
-                Map<String, String> row = new HashMap<>(columnCount);
-                for (int i = 1; i <= columnCount; i++) {
-                    // colName -> colValue
-                    row.put(metaData.getColumnName(i), rs.getString(i));
-                }
-                columnValues.add(row);
-            }
-            rs.close();
-        } catch (Exception e) {
-            if (e instanceof IllegalStateException) {
-                throw (IllegalStateException) e;
-            }
-            throw new IllegalStateException("extract column values by sql error, " + e.getMessage(), e);
-        }
-
-        return columnValues;
-    }
-
-    private void executeSql(String sqlStatement) {
-        try (
-                Connection conn = createJdbcConnection();
-                Statement stmt = conn.createStatement();
-        ) {
-            stmt.execute(sqlStatement);
-        } catch (Exception e) {
-            if (e instanceof IllegalStateException) {
-                throw (IllegalStateException) e;
-            }
-            throw new IllegalStateException("submit sql error, " + e.getMessage(), e);
-        }
-    }
-
-    private Connection createJdbcConnection() {
-        try {
-            Class.forName(MYSQL_80_DRIVER_NAME);
-        } catch (ClassNotFoundException e) {
-            try {
-                Class.forName(MYSQL_51_DRIVER_NAME);
-            } catch (ClassNotFoundException ie) {
-                String msg = String.format("Can't find mysql jdbc driver, please download it and " +
-                                "put it in your classpath manually. Note that the connector does not include " +
-                                "the mysql driver since version 1.1.1 because of the limitation of GPL license " +
-                                "used by the driver. You can download it from MySQL site %s, or Maven Central %s",
-                        MYSQL_SITE_URL, MAVEN_CENTRAL_URL);
-                throw new RuntimeException(msg);
-            }
-        }
-
-        try {
-            return DriverManager.getConnection(settings.getSrFeJdbcUrl(), settings.getSrUser(),
-                    settings.getSrPassword());
-        } catch (SQLException e) {
-            throw new RuntimeException(settings.getSrFeJdbcUrl(), e);
-        }
     }
 }

@@ -27,9 +27,26 @@ import com.starrocks.proto.TabletSchema.TabletSchemaPB;
 import com.starrocks.proto.Types;
 import org.junit.jupiter.api.BeforeAll;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public class BaseFormatTest {
+    // Driver name for mysql connector 5.1 which is deprecated in 8.0
+    private static final String MYSQL_51_DRIVER_NAME = "com.mysql.jdbc.Driver";
+    // Driver name for mysql connector 8.0
+    private static final String MYSQL_80_DRIVER_NAME = "com.mysql.cj.jdbc.Driver";
+    private static final String MYSQL_SITE_URL = "https://dev.mysql.com/downloads/connector/j/";
+    private static final String MAVEN_CENTRAL_URL = "https://repo1.maven.org/maven2/mysql/mysql-connector-java/";
 
     protected static final String DEFAULT_CATALOG = "default_catalog";
 
@@ -153,5 +170,109 @@ public class BaseFormatTest {
         public void setScale(Integer scale) {
             this.scale = scale;
         }
+    }
+
+
+    protected List<Map<String, String>> executeSqlWithReturn(String sqlPattern, List<String> parameters) {
+        List<Map<String, String>> columnValues = new ArrayList<>();
+        try (
+                Connection conn = createJdbcConnection();
+                PreparedStatement ps = conn.prepareStatement(sqlPattern)
+        ) {
+            for (int i = 1; i <= parameters.size(); i++) {
+                ps.setObject(i, parameters.get(i - 1));
+            }
+
+            ResultSet rs = ps.executeQuery();
+            ResultSetMetaData metaData = rs.getMetaData();
+            int columnCount = metaData.getColumnCount();
+            while (rs.next()) {
+                Map<String, String> row = new HashMap<>(columnCount);
+                for (int i = 1; i <= columnCount; i++) {
+                    // colName -> colValue
+                    row.put(metaData.getColumnName(i), rs.getString(i));
+                }
+                columnValues.add(row);
+            }
+            rs.close();
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException) {
+                throw (IllegalStateException) e;
+            }
+            throw new IllegalStateException("extract column values by sql error, " + e.getMessage(), e);
+        }
+
+        return columnValues;
+    }
+
+    protected void executeSql(String sqlStatement) {
+        try (
+                Connection conn = createJdbcConnection();
+                Statement stmt = conn.createStatement();
+        ) {
+            stmt.execute(sqlStatement);
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException) {
+                throw (IllegalStateException) e;
+            }
+            throw new IllegalStateException("submit sql error, " + e.getMessage(), e);
+        }
+    }
+
+    protected Connection createJdbcConnection() {
+        try {
+            Class.forName(MYSQL_80_DRIVER_NAME);
+        } catch (ClassNotFoundException e) {
+            try {
+                Class.forName(MYSQL_51_DRIVER_NAME);
+            } catch (ClassNotFoundException ie) {
+                String msg = String.format("Can't find mysql jdbc driver, please download it and " +
+                                "put it in your classpath manually. Note that the connector does not include " +
+                                "the mysql driver since version 1.1.1 because of the limitation of GPL license " +
+                                "used by the driver. You can download it from MySQL site %s, or Maven Central %s",
+                        MYSQL_SITE_URL, MAVEN_CENTRAL_URL);
+                throw new RuntimeException(msg);
+            }
+        }
+
+        try {
+            return DriverManager.getConnection(settings.getSrFeJdbcUrl(), settings.getSrUser(),
+                    settings.getSrPassword());
+        } catch (SQLException e) {
+            throw new RuntimeException(settings.getSrFeJdbcUrl(), e);
+        }
+    }
+
+    protected boolean waitAlterTableColumnFinished(String table) {
+        String sql = String.format("SHOW ALTER TABLE COLUMN FROM demo " +
+                "WHERE TableName = \"%s\" ORDER BY CreateTime DESC LIMIT 1;", table);
+        try {
+            Thread.sleep(2000);
+            String state;
+            long timeout = 60000;
+            long starTime = System.currentTimeMillis() / 1000;
+            do {
+                List<Map<String, String>> alters = executeSqlWithReturn(sql, new ArrayList<>());
+                if (alters.isEmpty()) {
+                    return false;
+                }
+                // loads only have one row
+                for (Map<String, String> l : alters) {
+                    state = l.get("State");
+                    if (state.equalsIgnoreCase("CANCELLED")) {
+                        System.out.println("Alter column had failed with error: " + l.get("ErrorMsg"));
+                        return false;
+                    } else if (state.equalsIgnoreCase("Finished")) {
+                        return true;
+                    } else {
+                        System.out.println("Alter column had not finished, try another loop with state = " + state);
+                    }
+                }
+                Thread.sleep(2000);
+            } while ((System.currentTimeMillis() / 1000 - starTime) < timeout);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        return false;
     }
 }

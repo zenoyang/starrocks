@@ -25,20 +25,31 @@ import java.util.Map;
 public class Validator {
 
     public static boolean validateSegmentLoadExport(TableSchema tableSchema) throws LoadNonSupportException {
-        for (int i = 0; i < tableSchema.getColumns().size(); i++) {
+        // 0. only olap table support segment load
+        if (!tableSchema.getTableType().equalsIgnoreCase("OLAP")) {
+            throw new LoadNonSupportException("Only olap table support for segment load.");
+        }
 
-            // 1. large int
+        // 1. only normal table state support segment load
+        if (!tableSchema.getState().equalsIgnoreCase("Normal")) {
+            String state = tableSchema.getState();
+            throw new LoadNonSupportException("Table is in " + state + " state, it did not support for segment load.");
+        }
+
+        for (int i = 0; i < tableSchema.getColumns().size(); i++) {
+            // 2.1 large int
             if (tableSchema.getColumns().get(i).getPrimitiveType().equalsIgnoreCase("LargeInt")) {
                 throw new LoadNonSupportException("Column type: LargeInt was not support for segment load.");
             }
 
-            // 2. auto increment column
+            // 2.2 auto increment column
             if (tableSchema.getColumns().get(i).getAutoIncrement()) {
                 throw new LoadNonSupportException("Auto increment column was not support for segment load.");
             }
         }
 
-        // 3. expr partition
+        // 3. expr partition. But the "Partitioning based on the column expression" was list partition type. Now
+        // there are no way to classify it.
         String partitionType = tableSchema.getPartitionInfo().getType();
         if (partitionType.equalsIgnoreCase("EXPR_RANGE") || partitionType.equalsIgnoreCase("EXPR_RANGE_V2")) {
             throw new LoadNonSupportException("Expr range partition was not support for segment load.");
@@ -67,13 +78,13 @@ public class Validator {
             throw new LoadNonSupportException("Unique constraints was not support for segment load.");
         }
 
-        // 8. unique_constraints
+        // 8. foreign_key_constraints
         if (!Strings.isNullOrEmpty(properties.get("foreign_key_constraints"))) {
             throw new LoadNonSupportException("Foreign key constraints was not support for segment load.");
         }
 
         // 9. bloom filter columns
-        if (!Strings.isNullOrEmpty(properties.get("bloom_filter_columns"))) {
+        if (tableSchema.getBfColumns() != null && !tableSchema.getBfColumns().isEmpty()) {
             throw new LoadNonSupportException("Bloom filter columns was not support for segment load.");
         }
 
