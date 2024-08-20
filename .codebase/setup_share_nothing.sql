@@ -11,7 +11,6 @@ CREATE TABLE `tb_all_primitivetype_write_duplicate` (
   `c_smallint` SMALLINT NULL COMMENT "",
   `c_int` int(11) NULL COMMENT "",
   `c_bigint` BIGINT NULL COMMENT "",
-  `c_largeint` LARGEINT NULL COMMENT "",
   `c_float` FLOAT NULL COMMENT "",
   `c_double` DOUBLE NULL COMMENT "",
   `c_date` DATE NULL COMMENT "",
@@ -29,6 +28,8 @@ PROPERTIES (
 "replication_num" = "1"
 );
 
+create table tb_all_primitivetype_write_duplicate2 like tb_all_primitivetype_write_duplicate;
+
 CREATE TABLE `tb_all_primitivetype_write_unique` (
   `rowId` int(11) NULL COMMENT "",
   `c_boolean` BOOLEAN NULL COMMENT "",
@@ -36,7 +37,6 @@ CREATE TABLE `tb_all_primitivetype_write_unique` (
   `c_smallint` SMALLINT NULL COMMENT "",
   `c_int` int(11) NULL COMMENT "",
   `c_bigint` BIGINT NULL COMMENT "",
-  `c_largeint` LARGEINT NULL COMMENT "",
   `c_float` FLOAT NULL COMMENT "",
   `c_double` DOUBLE NULL COMMENT "",
   `c_date` DATE NULL COMMENT "",
@@ -54,6 +54,8 @@ PROPERTIES (
 "replication_num" = "1"
 );
 
+create table tb_all_primitivetype_write_unique2 like tb_all_primitivetype_write_unique;
+
 CREATE TABLE `tb_all_primitivetype_write_primary` (
   `rowId` int(11) COMMENT "",
   `c_boolean` BOOLEAN NULL COMMENT "",
@@ -61,7 +63,6 @@ CREATE TABLE `tb_all_primitivetype_write_primary` (
   `c_smallint` SMALLINT NULL COMMENT "",
   `c_int` int(11) NULL COMMENT "",
   `c_bigint` BIGINT NULL COMMENT "",
-  `c_largeint` LARGEINT NULL COMMENT "",
   `c_float` FLOAT NULL COMMENT "",
   `c_double` DOUBLE NULL COMMENT "",
   `c_date` DATE NULL COMMENT "",
@@ -79,6 +80,8 @@ PROPERTIES (
 "replication_num" = "1"
 );
 
+create table tb_all_primitivetype_write_primary2 like tb_all_primitivetype_write_primary;
+
 CREATE TABLE `tb_all_primitivetype_write_aggregate` (
   `rowId` int(11) NULL COMMENT "",
   `c_boolean` BOOLEAN REPLACE NULL COMMENT "",
@@ -86,7 +89,6 @@ CREATE TABLE `tb_all_primitivetype_write_aggregate` (
   `c_smallint` SMALLINT MAX NULL COMMENT "",
   `c_int` int(11) SUM NULL COMMENT "",
   `c_bigint` BIGINT SUM NULL COMMENT "",
-  `c_largeint` LARGEINT SUM NULL COMMENT "",
   `c_float` FLOAT SUM NULL COMMENT "",
   `c_double` DOUBLE SUM NULL COMMENT "",
   `c_date` DATE MAX NULL COMMENT "",
@@ -106,3 +108,5 @@ PROPERTIES (
 "replicated_storage" = "true",
 "replication_num" = "1"
 );
+
+create table tb_all_primitivetype_write_aggregate2 like tb_all_primitivetype_write_aggregate;

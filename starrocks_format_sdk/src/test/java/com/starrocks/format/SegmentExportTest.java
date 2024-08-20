@@ -17,6 +17,7 @@
 
 package com.starrocks.format;
 
+import com.starrocks.format.rest.Validator;
 import com.starrocks.format.rest.model.TablePartition;
 import com.starrocks.format.rest.model.TableSchema;
 import com.starrocks.proto.TabletSchema;
@@ -80,17 +81,24 @@ public class SegmentExportTest extends BaseFormatTest {
         );
     }
 
+    private static Stream<Arguments> testAllPrimitiveTypeTwice() {
+        return Stream.of(
+                Arguments.of("tb_all_primitivetype_write_duplicate2"),
+                Arguments.of("tb_all_primitivetype_write_unique2"),
+                Arguments.of("tb_all_primitivetype_write_aggregate2"),
+                Arguments.of("tb_all_primitivetype_write_primary2")
+        );
+    }
+
     @ParameterizedTest
     @MethodSource("testAllPrimitiveType")
     public void testAllPrimitiveType(String tableName) throws Exception {
         String uuid = RandomStringUtils.randomAlphabetic(8);
         String stageDir = "s3a://bucket1/.staging_ut/" + uuid + "/";
         TableSchema tableSchema = restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName);
-        for (int i = 0; i < tableSchema.getColumns().size(); i++) {
-            tableSchema.getColumns().get(i).setUniqueId(i);
-        }
-        for (int i = 0; i < tableSchema.getIndexMetas().get(0).getColumns().size(); i++) {
-            tableSchema.getIndexMetas().get(0).getColumns().get(i).setUniqueId(i);
+        Validator.validateSegmentLoadExport(tableSchema);
+        if (!Validator.assignUniqColumnId(tableSchema)) {
+            throw new Exception("Unable to assign unique column id.");
         }
         TabletSchema.TabletSchemaPB tabletSchema = toPbTabletSchema(tableSchema);
 
@@ -145,11 +153,100 @@ public class SegmentExportTest extends BaseFormatTest {
 
         loadSegmentData(db, label, stageDir, tableName, ak, sk, endpoint);
         boolean res = waitUtilLoadFinished(db, label);
-
         assertTrue(res);
+
         List<Map<String, String>> outputs = getTableResults(db, tableName, "rowId");
         assertEquals(1, outputs.size());
         assertEquals(400, Integer.valueOf(outputs.get(0).get("num")));
+    }
+
+    @ParameterizedTest
+    @MethodSource("testAllPrimitiveTypeTwice")
+    public void testAllPrimitiveTypeTwice(String tableName) throws Exception {
+        int times = 2;
+        String db = "demo";
+        for (int i = 0; i < times; i++) {
+            String uuid = RandomStringUtils.randomAlphabetic(8);
+            String stageDir = "s3a://bucket1/.staging_ut/" + uuid + "/";
+            TableSchema tableSchema = restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName);
+            Validator.validateSegmentLoadExport(tableSchema);
+            if (!Validator.assignUniqColumnId(tableSchema)) {
+                throw new Exception("Unable to assign unique column id.");
+            }
+            TabletSchema.TabletSchemaPB tabletSchema = toPbTabletSchema(tableSchema);
+
+            List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME,
+                    tableName, false);
+            long tableId = tableSchema.getId();
+            long indexId = tableSchema.getIndexMetas().get(0).getIndexId();
+
+            assertFalse(partitions.isEmpty());
+            for (TablePartition partition : partitions) {
+                List<TablePartition.Tablet> tablets = partition.getTablets();
+                assertFalse(tablets.isEmpty());
+
+                for (TablePartition.Tablet tablet : tablets) {
+                    Long tabletId = tablet.getId();
+                    try {
+                        String storagePath = stageDir + "/" + tableId + "/" + partition.getId() + "/"
+                                + indexId + "/" + tabletId;
+                        StarRocksWriter writer = new StarRocksWriter(tabletId,
+                                tabletSchema,
+                                -1L,
+                                storagePath,
+                                settings.toMap());
+                        writer.open();
+                        // write use chunk interface
+                        Chunk chunk = writer.newChunk(4096);
+
+                        chunk.reset();
+                        fillSampleData(tabletSchema, chunk, 0, 200);
+                        writer.write(chunk);
+
+                        chunk.reset();
+                        fillSampleData(tabletSchema, chunk, 200, 200);
+                        writer.write(chunk);
+
+                        chunk.release();
+                        writer.flush();
+                        writer.finish();
+                        writer.close();
+                        writer.release();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        fail();
+                    }
+                }
+            }
+
+            String label = String.format("bypass_write_%s_%s_%s", DB_NAME, tableName, uuid);
+            String ak = settings.getS3AccessKey();
+            String sk = settings.getS3SecretKey();
+            String endpoint = settings.getS3Endpoint();
+
+            loadSegmentData(db, label, stageDir, tableName, ak, sk, endpoint);
+            boolean res = waitUtilLoadFinished(db, label);
+            assertTrue(res);
+        }
+
+        List<Map<String, String>> outputs = getTableResults(db, tableName, "rowId");
+        assertEquals(1, outputs.size());
+        switch (tableName) {
+            case "tb_all_primitivetype_write_duplicate2":
+                assertEquals(800, Integer.valueOf(outputs.get(0).get("num")));
+                break;
+            case "tb_all_primitivetype_write_unique2":
+                assertEquals(400, Integer.valueOf(outputs.get(0).get("num")));
+                break;
+            case "tb_all_primitivetype_write_aggregate2":
+                assertEquals(400, Integer.valueOf(outputs.get(0).get("num")));
+                break;
+            case "tb_all_primitivetype_write_primary2":
+                assertEquals(400, Integer.valueOf(outputs.get(0).get("num")));
+                break;
+            default:
+                fail();
+        }
     }
 
     @Test
