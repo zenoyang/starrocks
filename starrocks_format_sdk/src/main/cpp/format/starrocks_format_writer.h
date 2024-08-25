@@ -60,7 +60,6 @@ public:
 private:
     Status put_txn_log(const TxnLogPtr& log);
     StatusOr<TabletMetadataPtr> get_tablet_metadata(std::shared_ptr<FileSystem> fs);
-
 private:
     int64_t _tablet_id;
     std::shared_ptr<TabletSchema> _tablet_schema;
@@ -75,6 +74,9 @@ private:
     std::unique_ptr<TabletWriter> _tablet_writer;
 
     bool _share_data = true;
+
+    std::string _tablet_context;
+
     std::vector<std::shared_ptr<SegmentPB>> _segment_pbs;
     size_t _total_row_size = 0;
 };

@@ -211,6 +211,23 @@ public class RestClient implements AutoCloseable {
                 });
     }
 
+
+    /**
+     * Request to get tablet meta.
+     */
+    public String getTabletMeta(String metaUrl) throws RequestException {
+        LOG.info("Get tablet meta from {}", metaUrl);
+        HttpGet request = new HttpGet(metaUrl);
+        return this.doRequest(
+                request,
+                httpEntity -> {
+                    if (null == httpEntity) {
+                        throw new RequestException(request, "null response entity");
+                    }
+                    return EntityUtils.toString(httpEntity, StandardCharsets.UTF_8);
+                });
+    }
+
     /**
      * Request to list all table partitions.
      */

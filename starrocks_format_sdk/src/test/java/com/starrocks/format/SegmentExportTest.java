@@ -77,7 +77,7 @@ public class SegmentExportTest extends BaseFormatTest {
 
     private static Stream<Arguments> testSchemaChangeTable() {
         return Stream.of(
-//                Arguments.of("tb_fast_schema_change_table"),
+//                Arguments.of("tb_fast_schema_change_table")
                 Arguments.of("tb_no_fast_schema_change_table")
         );
     }
@@ -108,11 +108,15 @@ public class SegmentExportTest extends BaseFormatTest {
                 try {
                     String storagePath = stageDir + "/" + tableId + "/" + partition.getId() + "/"
                             + indexId + "/" + tabletId;
+                    Map<String, String> options = settings.toMap();
+                    // http://10.37.55.121:8040/api/meta/header/15143
+                    String metaUrl = tablet.getMetaUrls().get(0);
+                    options.put("starrocks.format.tablet_url", metaUrl);
                     StarRocksWriter writer = new StarRocksWriter(tabletId,
                             tabletSchema,
                             -1L,
                             storagePath,
-                            settings.toMap());
+                            options);
                     writer.open();
                     // write use chunk interface
                     Chunk chunk = writer.newChunk(4096);
@@ -180,11 +184,15 @@ public class SegmentExportTest extends BaseFormatTest {
                     try {
                         String storagePath = stageDir + "/" + tableId + "/" + partition.getId() + "/"
                                 + indexId + "/" + tabletId;
+                        Map<String, String> options = settings.toMap();
+                        // http://10.37.55.121:8040/api/meta/header/15143
+                        String metaUrl = tablet.getMetaUrls().get(0);
+                        options.put("starrocks.format.tablet_url", metaUrl);
                         StarRocksWriter writer = new StarRocksWriter(tabletId,
                                 tabletSchema,
                                 -1L,
                                 storagePath,
-                                settings.toMap());
+                                options);
                         writer.open();
                         // write use chunk interface
                         Chunk chunk = writer.newChunk(4096);
@@ -274,11 +282,16 @@ public class SegmentExportTest extends BaseFormatTest {
                 try {
                     String storagePath = stageDir + "/" + tableId + "/" + partition.getId() + "/"
                             + indexId + "/" + tabletId;
+                    Map<String, String> options = settings.toMap();
+                    // http://10.37.55.121:8040/api/meta/header/15143
+                    String metaUrl = tablet.getMetaUrls().get(0);
+                    String metaContext = restClient.getTabletMeta(metaUrl);
+                    options.put("starrocks.format.metaContext", metaContext);
                     StarRocksWriter writer = new StarRocksWriter(tabletId,
                             tabletSchema,
                             -1L,
                             storagePath,
-                            settings.toMap());
+                            options);
                     writer.open();
                     // write use chunk interface
                     Chunk chunk = writer.newChunk(4096);

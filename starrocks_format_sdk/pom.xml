@@ -310,7 +310,7 @@
         <profile>
             <id>format-lib</id>
             <properties>
-                <compile-be-parallel>12</compile-be-parallel>
+                <compile-be-parallel>32</compile-be-parallel>
             </properties>
             <build>
                 <plugins>

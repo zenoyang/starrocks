@@ -15,10 +15,16 @@
 package com.starrocks.http.rest.v2.vo;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 public class TabletView {
@@ -31,6 +37,9 @@ public class TabletView {
 
     @SerializedName("backendIds")
     private Set<Long> backendIds;
+
+    @SerializedName("metaUrls")
+    private List<String> metaUrls;
 
     public TabletView() {
     }
@@ -50,6 +59,21 @@ public class TabletView {
             } catch (UserException e) {
                 throw new IllegalStateException(e.getMessage(), e);
             }
+        } else if (tablet instanceof LocalTablet) {
+            List<String> metaUrls = new ArrayList<>();
+            SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+            for (long backendId : tablet.getBackendIds()) {
+                Backend backend = infoService.getBackend(backendId);
+                if (backend == null) {
+                    continue;
+                }
+                String metaUrl = String.format("http://%s:%d/api/meta/header/%d",
+                        backend.getHost(),
+                        backend.getHttpPort(),
+                        tablet.getId());
+                metaUrls.add(metaUrl);
+            }
+            tvo.setMetaUrls(metaUrls);
         }
 
         return tvo;
@@ -77,5 +101,13 @@ public class TabletView {
 
     public void setBackendIds(Set<Long> backendIds) {
         this.backendIds = backendIds;
+    }
+
+    public List<String> getMetaUrls() {
+        return metaUrls;
+    }
+
+    public void setMetaUrls(List<String> metaUrls) {
+        this.metaUrls = metaUrls;
     }
 }

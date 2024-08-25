@@ -175,6 +175,9 @@ public class TablePartition {
         @JsonProperty("backendIds")
         private Set<Long> backendIds;
 
+        @JsonProperty("metaUrls")
+        private List<String> metaUrls;
+
         public Tablet() {
         }
 
@@ -200,6 +203,14 @@ public class TablePartition {
 
         public void setBackendIds(Set<Long> backendIds) {
             this.backendIds = backendIds;
+        }
+
+        public List<String> getMetaUrls() {
+            return metaUrls;
+        }
+
+        public void setMetaUrls(List<String> metaUrls) {
+            this.metaUrls = metaUrls;
         }
     }
 

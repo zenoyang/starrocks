@@ -15,6 +15,7 @@
 #include "starrocks_format_writer.h"
 
 #include <glog/logging.h>
+#include <json2pb/json_to_pb.h>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -54,6 +55,14 @@ StarRocksFormatWriter::StarRocksFormatWriter(int64_t tablet_id, std::shared_ptr<
             _share_data = false;
         }
     }
+    if (!_share_data) {
+        auto url = _options.find("starrocks.format.metaContext");
+        if (url != _options.end()) {
+            _tablet_context = url->second;
+        } else {
+            LOG(WARNING) << "starrocks.format.metaContext must be set in share_noting mode";
+        }
+    }
     _max_rows_per_segment =
             getIntOrDefault(_options, "starrocks.format.rows_per_segment", std::numeric_limits<uint32_t>::max());
 }
@@ -75,6 +84,15 @@ Status StarRocksFormatWriter::open() {
             // get tablet schema;
             ASSIGN_OR_RETURN(auto metadata, get_tablet_metadata(fs));
             _tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
+        } else if (!_tablet_context.empty()) {
+            TabletMetaPB tablet_meta_pb;
+            bool ret = json2pb::JsonToProtoMessage(_tablet_context, &tablet_meta_pb);
+            if (ret) {
+                _tablet_schema = std::make_shared<TabletSchema>(tablet_meta_pb.schema());
+            } else {
+                return Status::InternalError("Convert json to TabletMetaPB failed.");
+            }
+            LOG(INFO) << "Gain the tablet schema from context ";
         }
 
         _tablet = std::make_unique<Tablet>(_lake_tablet_manager, _tablet_id, _provider, _tablet_schema);
