@@ -97,41 +97,4 @@ public class Validator {
 
         return true;
     }
-
-    /**
-     * The share everything tablet writer should have a column unique id for writing segment.
-     * But before 3.3 version of share nothing star rocks will not generate the column uniq id.
-     * So we have to assign it for segment export with sequence order.
-     * @param tableSchema from rest request
-     * @return true if it's modified or keep origin uniq id. return false if there is unexpected value.
-     */
-    public static boolean assignUniqColumnId(TableSchema tableSchema) {
-        boolean hasNegative = false;
-        boolean allNegative = true;
-        for (int i = 0; i < tableSchema.getColumns().size(); i++) {
-            if (tableSchema.getColumns().get(i).getUniqueId() == -1) {
-                hasNegative = true;
-                break;
-            }
-        }
-        for (int i = 0; i < tableSchema.getColumns().size(); i++) {
-            if (hasNegative && tableSchema.getColumns().get(i).getUniqueId() != -1) {
-                allNegative = false;
-                break;
-            }
-        }
-
-        if (!hasNegative) {
-            return true;
-        } else if (!allNegative) {
-            return false;
-        }
-        for (int i = 0; i < tableSchema.getColumns().size(); i++) {
-            tableSchema.getColumns().get(i).setUniqueId(i);
-        }
-        for (int i = 0; i < tableSchema.getIndexMetas().get(0).getColumns().size(); i++) {
-            tableSchema.getIndexMetas().get(0).getColumns().get(i).setUniqueId(i);
-        }
-        return true;
-    }
 }

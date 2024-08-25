@@ -77,7 +77,7 @@ public class SegmentExportTest extends BaseFormatTest {
 
     private static Stream<Arguments> testSchemaChangeTable() {
         return Stream.of(
-//                Arguments.of("tb_fast_schema_change_table")
+                Arguments.of("tb_fast_schema_change_table"),
                 Arguments.of("tb_no_fast_schema_change_table")
         );
     }
@@ -89,9 +89,6 @@ public class SegmentExportTest extends BaseFormatTest {
         String stageDir = "s3a://bucket1/.staging_ut/" + uuid + "/";
         TableSchema tableSchema = restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName);
         Validator.validateSegmentLoadExport(tableSchema);
-        if (!Validator.assignUniqColumnId(tableSchema)) {
-            throw new Exception("Unable to assign unique column id.");
-        }
         TabletSchema.TabletSchemaPB tabletSchema = toPbTabletSchema(tableSchema);
 
         List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
@@ -99,6 +96,8 @@ public class SegmentExportTest extends BaseFormatTest {
         long indexId = tableSchema.getIndexMetas().get(0).getIndexId();
 
         assertFalse(partitions.isEmpty());
+        String fastSchemaChange = tableSchema.isFastSchemaChange();
+
         for (TablePartition partition : partitions) {
             List<TablePartition.Tablet> tablets = partition.getTablets();
             assertFalse(tablets.isEmpty());
@@ -109,9 +108,13 @@ public class SegmentExportTest extends BaseFormatTest {
                     String storagePath = stageDir + "/" + tableId + "/" + partition.getId() + "/"
                             + indexId + "/" + tabletId;
                     Map<String, String> options = settings.toMap();
-                    // http://10.37.55.121:8040/api/meta/header/15143
-                    String metaUrl = tablet.getMetaUrls().get(0);
-                    options.put("starrocks.format.tablet_url", metaUrl);
+                    if (fastSchemaChange.equalsIgnoreCase("false")) {
+                        // http://10.37.55.121:8040/api/meta/header/15143
+                        String metaUrl = tablet.getMetaUrls().get(0);
+                        String metaContext = restClient.getTabletMeta(metaUrl);
+                        options.put("starrocks.format.metaContext", metaContext);
+                        options.put("starrocks.format.fastSchemaChange", fastSchemaChange);
+                    }
                     StarRocksWriter writer = new StarRocksWriter(tabletId,
                             tabletSchema,
                             -1L,
@@ -153,6 +156,10 @@ public class SegmentExportTest extends BaseFormatTest {
         List<Map<String, String>> outputs = getTableRowNum(DB_NAME, tableName);
         assertEquals(1, outputs.size());
         assertEquals(400, Integer.valueOf(outputs.get(0).get("num")));
+
+        List<Map<String, String>> outputsNotNull = getTableRowNumNotNUll(DB_NAME, tableName);
+        assertEquals(1, outputsNotNull.size());
+        assertEquals(399, Integer.valueOf(outputsNotNull.get(0).get("num")));
     }
 
     @ParameterizedTest
@@ -164,9 +171,6 @@ public class SegmentExportTest extends BaseFormatTest {
             String stageDir = "s3a://bucket1/.staging_ut/" + uuid + "/";
             TableSchema tableSchema = restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName);
             Validator.validateSegmentLoadExport(tableSchema);
-            if (!Validator.assignUniqColumnId(tableSchema)) {
-                throw new Exception("Unable to assign unique column id.");
-            }
             TabletSchema.TabletSchemaPB tabletSchema = toPbTabletSchema(tableSchema);
 
             List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME,
@@ -175,6 +179,7 @@ public class SegmentExportTest extends BaseFormatTest {
             long indexId = tableSchema.getIndexMetas().get(0).getIndexId();
 
             assertFalse(partitions.isEmpty());
+            String fastSchemaChange = tableSchema.isFastSchemaChange();
             for (TablePartition partition : partitions) {
                 List<TablePartition.Tablet> tablets = partition.getTablets();
                 assertFalse(tablets.isEmpty());
@@ -185,9 +190,13 @@ public class SegmentExportTest extends BaseFormatTest {
                         String storagePath = stageDir + "/" + tableId + "/" + partition.getId() + "/"
                                 + indexId + "/" + tabletId;
                         Map<String, String> options = settings.toMap();
-                        // http://10.37.55.121:8040/api/meta/header/15143
-                        String metaUrl = tablet.getMetaUrls().get(0);
-                        options.put("starrocks.format.tablet_url", metaUrl);
+                        if (fastSchemaChange.equalsIgnoreCase("false")) {
+                            // http://10.37.55.121:8040/api/meta/header/15143
+                            String metaUrl = tablet.getMetaUrls().get(0);
+                            String metaContext = restClient.getTabletMeta(metaUrl);
+                            options.put("starrocks.format.metaContext", metaContext);
+                            options.put("starrocks.format.fastSchemaChange", fastSchemaChange);
+                        }
                         StarRocksWriter writer = new StarRocksWriter(tabletId,
                                 tabletSchema,
                                 -1L,
@@ -245,6 +254,25 @@ public class SegmentExportTest extends BaseFormatTest {
             default:
                 fail();
         }
+
+        List<Map<String, String>> outputsNotNull = getTableRowNumNotNUll(DB_NAME, tableName);
+        assertEquals(1, outputsNotNull.size());
+        switch (tableName) {
+            case "tb_all_primitivetype_write_duplicate2":
+                assertEquals(798, Integer.valueOf(outputsNotNull.get(0).get("num")));
+                break;
+            case "tb_all_primitivetype_write_unique2":
+                assertEquals(399, Integer.valueOf(outputsNotNull.get(0).get("num")));
+                break;
+            case "tb_all_primitivetype_write_aggregate2":
+                assertEquals(399, Integer.valueOf(outputsNotNull.get(0).get("num")));
+                break;
+            case "tb_all_primitivetype_write_primary2":
+                assertEquals(399, Integer.valueOf(outputsNotNull.get(0).get("num")));
+                break;
+            default:
+                fail();
+        }
     }
 
     @ParameterizedTest
@@ -263,15 +291,13 @@ public class SegmentExportTest extends BaseFormatTest {
         String stageDir = "s3a://bucket1/.staging_ut/" + uuid + "/";
         TableSchema tableSchema = restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName);
         Validator.validateSegmentLoadExport(tableSchema);
-        if (!Validator.assignUniqColumnId(tableSchema)) {
-            throw new Exception("Unable to assign unique column id.");
-        }
+
         TabletSchema.TabletSchemaPB tabletSchema = toPbTabletSchema(tableSchema);
 
         List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
         long tableId = tableSchema.getId();
         long indexId = tableSchema.getIndexMetas().get(0).getIndexId();
-
+        String fastSchemaChange = tableSchema.isFastSchemaChange();
         assertFalse(partitions.isEmpty());
         for (TablePartition partition : partitions) {
             List<TablePartition.Tablet> tablets = partition.getTablets();
@@ -283,10 +309,13 @@ public class SegmentExportTest extends BaseFormatTest {
                     String storagePath = stageDir + "/" + tableId + "/" + partition.getId() + "/"
                             + indexId + "/" + tabletId;
                     Map<String, String> options = settings.toMap();
-                    // http://10.37.55.121:8040/api/meta/header/15143
-                    String metaUrl = tablet.getMetaUrls().get(0);
-                    String metaContext = restClient.getTabletMeta(metaUrl);
-                    options.put("starrocks.format.metaContext", metaContext);
+                    if (fastSchemaChange.equalsIgnoreCase("false")) {
+                        // http://10.37.55.121:8040/api/meta/header/15143
+                        String metaUrl = tablet.getMetaUrls().get(0);
+                        String metaContext = restClient.getTabletMeta(metaUrl);
+                        options.put("starrocks.format.metaContext", metaContext);
+                        options.put("starrocks.format.fastSchemaChange", fastSchemaChange);
+                    }
                     StarRocksWriter writer = new StarRocksWriter(tabletId,
                             tabletSchema,
                             -1L,
@@ -328,6 +357,10 @@ public class SegmentExportTest extends BaseFormatTest {
         List<Map<String, String>> outputs = getTableRowNum(DB_NAME, tableName);
         assertEquals(1, outputs.size());
         assertEquals(400, Integer.valueOf(outputs.get(0).get("num")));
+
+        List<Map<String, String>> outputsNotNull = getTableRowNumNotNUll(DB_NAME, tableName);
+        assertEquals(1, outputsNotNull.size());
+        assertEquals(399, Integer.valueOf(outputsNotNull.get(0).get("num")));
     }
 
     @Test
@@ -579,6 +612,11 @@ public class SegmentExportTest extends BaseFormatTest {
 
     public List<Map<String, String>> getTableRowNum(String db, String table) {
         String queryStmt = String.format("select count(*) as num from `%s`.`%s`;", db, table);
+        return executeSqlWithReturn(queryStmt, new ArrayList<>());
+    }
+
+    public List<Map<String, String>> getTableRowNumNotNUll(String db, String table) {
+        String queryStmt = String.format("select count(*) as num from `%s`.`%s` where c_int is not null;", db, table);
         return executeSqlWithReturn(queryStmt, new ArrayList<>());
     }
 

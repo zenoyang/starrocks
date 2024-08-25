@@ -60,7 +60,18 @@ StarRocksFormatWriter::StarRocksFormatWriter(int64_t tablet_id, std::shared_ptr<
         if (url != _options.end()) {
             _tablet_context = url->second;
         } else {
-            LOG(WARNING) << "starrocks.format.metaContext must be set in share_noting mode";
+            LOG(WARNING) << "starrocks.format.metaContext was not be set in share_noting mode";
+        }
+
+        auto it = _options.find("starrocks.format.fastSchemaChange");
+        if (it != _options.end()) {
+            if (it->second == "true") {
+                _fast_schema_change = true;
+            } else if (it->second == "false") {
+                _fast_schema_change = false;
+            }
+        } else {
+            LOG(WARNING) << "starrocks.format.metaContext was not be set in share_noting mode";
         }
     }
     _max_rows_per_segment =
@@ -84,7 +95,7 @@ Status StarRocksFormatWriter::open() {
             // get tablet schema;
             ASSIGN_OR_RETURN(auto metadata, get_tablet_metadata(fs));
             _tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
-        } else if (!_tablet_context.empty()) {
+        } else if (!_tablet_context.empty() && !_fast_schema_change) { // non fast schema change will use meta
             TabletMetaPB tablet_meta_pb;
             bool ret = json2pb::JsonToProtoMessage(_tablet_context, &tablet_meta_pb);
             if (ret) {
