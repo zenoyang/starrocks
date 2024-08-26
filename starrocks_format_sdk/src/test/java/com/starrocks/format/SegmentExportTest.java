@@ -17,6 +17,8 @@
 
 package com.starrocks.format;
 
+import com.starrocks.format.rest.LoadNonSupportException;
+import com.starrocks.format.rest.RequestException;
 import com.starrocks.format.rest.Validator;
 import com.starrocks.format.rest.model.TablePartition;
 import com.starrocks.format.rest.model.TableSchema;
@@ -82,84 +84,54 @@ public class SegmentExportTest extends BaseFormatTest {
         );
     }
 
+    private static Stream<Arguments> testCompressTypeTable() {
+        return Stream.of(
+                Arguments.of("tb_all_primitivetype_compress_lz4"),
+                Arguments.of("tb_all_primitivetype_compress_zstd"),
+                Arguments.of("tb_all_primitivetype_compress_zlib"),
+                Arguments.of("tb_all_primitivetype_compress_snappy")
+        );
+    }
+
+    private static Stream<Arguments> testSortByTypeTable() {
+        return Stream.of(
+                Arguments.of("tb_all_primitivetype_order_by_int"),
+                Arguments.of("tb_all_primitivetype_order_by_varchar")
+        );
+    }
+
+    private static Stream<Arguments> testSwapTable() {
+        return Stream.of(
+                Arguments.of("tb_all_primitivetype_swap_table"),
+                Arguments.of("tb_all_primitivetype_swap_diff_table")
+        );
+    }
+
+    private static Stream<Arguments> testStorageTypeTable() {
+        return Stream.of(
+                Arguments.of("tb_all_primitivetype_storage_hdd")
+        );
+    }
+
+
+    private static Stream<Arguments> testPartitionTable() {
+        return Stream.of(
+                Arguments.of("tb_all_primitivetype_partition_dup_table"),
+                Arguments.of("tb_all_primitivetype_partition_primary_table")
+        );
+    }
+
+    private static Stream<Arguments> testListPartitionTable() {
+        return Stream.of(
+                Arguments.of("tb_all_primitivetype_list_partition_dup_table"),
+                Arguments.of("tb_all_primitivetype_list_partition_primary_table")
+        );
+    }
+
     @ParameterizedTest
     @MethodSource("testAllPrimitiveType")
     public void testAllPrimitiveType(String tableName) throws Exception {
-        String uuid = RandomStringUtils.randomAlphabetic(8);
-        String stageDir = "s3a://bucket1/.staging_ut/" + uuid + "/";
-        TableSchema tableSchema = restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName);
-        Validator.validateSegmentLoadExport(tableSchema);
-        TabletSchema.TabletSchemaPB tabletSchema = toPbTabletSchema(tableSchema);
-
-        List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
-        long tableId = tableSchema.getId();
-        long indexId = tableSchema.getIndexMetas().get(0).getIndexId();
-
-        assertFalse(partitions.isEmpty());
-        String fastSchemaChange = tableSchema.isFastSchemaChange();
-
-        for (TablePartition partition : partitions) {
-            List<TablePartition.Tablet> tablets = partition.getTablets();
-            assertFalse(tablets.isEmpty());
-
-            for (TablePartition.Tablet tablet : tablets) {
-                Long tabletId = tablet.getId();
-                try {
-                    String storagePath = stageDir + "/" + tableId + "/" + partition.getId() + "/"
-                            + indexId + "/" + tabletId;
-                    Map<String, String> options = settings.toMap();
-                    if (fastSchemaChange.equalsIgnoreCase("false")) {
-                        // http://10.37.55.121:8040/api/meta/header/15143
-                        String metaUrl = tablet.getMetaUrls().get(0);
-                        String metaContext = restClient.getTabletMeta(metaUrl);
-                        options.put("starrocks.format.metaContext", metaContext);
-                        options.put("starrocks.format.fastSchemaChange", fastSchemaChange);
-                    }
-                    StarRocksWriter writer = new StarRocksWriter(tabletId,
-                            tabletSchema,
-                            -1L,
-                            storagePath,
-                            options);
-                    writer.open();
-                    // write use chunk interface
-                    Chunk chunk = writer.newChunk(4096);
-
-                    chunk.reset();
-                    fillSampleData(tabletSchema, chunk, 0, 200);
-                    writer.write(chunk);
-
-                    chunk.reset();
-                    fillSampleData(tabletSchema, chunk, 200, 200);
-                    writer.write(chunk);
-
-                    chunk.release();
-                    writer.flush();
-                    writer.finish();
-                    writer.close();
-                    writer.release();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    fail();
-                }
-            }
-        }
-
-        String label = String.format("bypass_write_%s_%s_%s", DB_NAME, tableName, uuid);
-        String ak = settings.getS3AccessKey();
-        String sk = settings.getS3SecretKey();
-        String endpoint = settings.getS3Endpoint();
-
-        loadSegmentData(DB_NAME, label, stageDir, tableName, ak, sk, endpoint);
-        boolean res = waitUtilLoadFinished(DB_NAME, label);
-        assertTrue(res);
-
-        List<Map<String, String>> outputs = getTableRowNum(DB_NAME, tableName);
-        assertEquals(1, outputs.size());
-        assertEquals(400, Integer.valueOf(outputs.get(0).get("num")));
-
-        List<Map<String, String>> outputsNotNull = getTableRowNumNotNUll(DB_NAME, tableName);
-        assertEquals(1, outputsNotNull.size());
-        assertEquals(399, Integer.valueOf(outputsNotNull.get(0).get("num")));
+        testTableTypes(tableName);
     }
 
     @ParameterizedTest
@@ -286,19 +258,283 @@ public class SegmentExportTest extends BaseFormatTest {
                 " DEFAULT \"0\" AFTER c_datetime", tableName);
         executeSql(addColumnTable);
         Assertions.assertTrue(waitAlterTableColumnFinished(tableName));
+        testTableTypes(tableName);
+    }
+
+    @Test
+    public void testRenameTable() throws Exception {
+        String tableName = "tb_all_primitivetype_rename_table";
 
         String uuid = RandomStringUtils.randomAlphabetic(8);
         String stageDir = "s3a://bucket1/.staging_ut/" + uuid + "/";
         TableSchema tableSchema = restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName);
         Validator.validateSegmentLoadExport(tableSchema);
-
         TabletSchema.TabletSchemaPB tabletSchema = toPbTabletSchema(tableSchema);
 
         List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
         long tableId = tableSchema.getId();
         long indexId = tableSchema.getIndexMetas().get(0).getIndexId();
-        String fastSchemaChange = tableSchema.isFastSchemaChange();
+
         assertFalse(partitions.isEmpty());
+        String fastSchemaChange = tableSchema.isFastSchemaChange();
+
+        for (TablePartition partition : partitions) {
+            List<TablePartition.Tablet> tablets = partition.getTablets();
+            assertFalse(tablets.isEmpty());
+
+            for (TablePartition.Tablet tablet : tablets) {
+                Long tabletId = tablet.getId();
+                try {
+                    String storagePath = stageDir + "/" + tableId + "/" + partition.getId() + "/"
+                            + indexId + "/" + tabletId;
+                    Map<String, String> options = settings.toMap();
+                    if (fastSchemaChange.equalsIgnoreCase("false")) {
+                        // http://10.37.55.121:8040/api/meta/header/15143
+                        String metaUrl = tablet.getMetaUrls().get(0);
+                        String metaContext = restClient.getTabletMeta(metaUrl);
+                        options.put("starrocks.format.metaContext", metaContext);
+                        options.put("starrocks.format.fastSchemaChange", fastSchemaChange);
+                    }
+                    StarRocksWriter writer = new StarRocksWriter(tabletId,
+                            tabletSchema,
+                            -1L,
+                            storagePath,
+                            options);
+                    writer.open();
+                    // write use chunk interface
+                    Chunk chunk = writer.newChunk(4096);
+
+                    chunk.reset();
+                    fillSampleData(tabletSchema, chunk, 0, 200);
+                    writer.write(chunk);
+
+                    chunk.reset();
+                    fillSampleData(tabletSchema, chunk, 200, 200);
+                    writer.write(chunk);
+
+                    chunk.release();
+                    writer.flush();
+                    writer.finish();
+                    writer.close();
+                    writer.release();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    fail();
+                }
+            }
+        }
+
+        String renameSql = String.format("alter table `demo`.`%s` rename tb_all_primitivetype_rename_table2",tableName);
+        executeSql(renameSql);
+        Thread.sleep(1000);
+
+        String label = String.format("bypass_write_%s_%s_%s", DB_NAME, tableName, uuid);
+        String ak = settings.getS3AccessKey();
+        String sk = settings.getS3SecretKey();
+        String endpoint = settings.getS3Endpoint();
+
+        IllegalStateException illegalStateException = Assertions.assertThrows(IllegalStateException.class,
+                ()->loadSegmentData(DB_NAME, label, stageDir, tableName, ak, sk, endpoint));
+        Assertions.assertEquals("submit sql error, Getting analyzing error." +
+                " Detail message: Table demo.tb_all_primitivetype_rename_table is not found.",
+                illegalStateException.getMessage());
+    }
+
+    @Test
+    public void testModifyTableComment() throws Exception {
+        String tableName = "tb_all_primitivetype_modify_comment";
+
+        String uuid = RandomStringUtils.randomAlphabetic(8);
+        String stageDir = "s3a://bucket1/.staging_ut/" + uuid + "/";
+        TableSchema tableSchema = restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName);
+        Validator.validateSegmentLoadExport(tableSchema);
+        TabletSchema.TabletSchemaPB tabletSchema = toPbTabletSchema(tableSchema);
+
+        List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
+        long tableId = tableSchema.getId();
+        long indexId = tableSchema.getIndexMetas().get(0).getIndexId();
+
+        assertFalse(partitions.isEmpty());
+        String fastSchemaChange = tableSchema.isFastSchemaChange();
+
+        for (TablePartition partition : partitions) {
+            List<TablePartition.Tablet> tablets = partition.getTablets();
+            assertFalse(tablets.isEmpty());
+
+            for (TablePartition.Tablet tablet : tablets) {
+                Long tabletId = tablet.getId();
+                try {
+                    String storagePath = stageDir + "/" + tableId + "/" + partition.getId() + "/"
+                            + indexId + "/" + tabletId;
+                    Map<String, String> options = settings.toMap();
+                    if (fastSchemaChange.equalsIgnoreCase("false")) {
+                        // http://10.37.55.121:8040/api/meta/header/15143
+                        String metaUrl = tablet.getMetaUrls().get(0);
+                        String metaContext = restClient.getTabletMeta(metaUrl);
+                        options.put("starrocks.format.metaContext", metaContext);
+                        options.put("starrocks.format.fastSchemaChange", fastSchemaChange);
+                    }
+                    StarRocksWriter writer = new StarRocksWriter(tabletId,
+                            tabletSchema,
+                            -1L,
+                            storagePath,
+                            options);
+                    writer.open();
+                    // write use chunk interface
+                    Chunk chunk = writer.newChunk(4096);
+
+                    chunk.reset();
+                    fillSampleData(tabletSchema, chunk, 0, 200);
+                    writer.write(chunk);
+
+                    chunk.reset();
+                    fillSampleData(tabletSchema, chunk, 200, 200);
+                    writer.write(chunk);
+
+                    chunk.release();
+                    writer.flush();
+                    writer.finish();
+                    writer.close();
+                    writer.release();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    fail();
+                }
+            }
+        }
+
+        String modifyComment = String.format("alter table `demo`.`%s` COMMENT = \"this is test table\"",tableName);
+        executeSql(modifyComment);
+        Thread.sleep(1000);
+
+        String label = String.format("bypass_write_%s_%s_%s", DB_NAME, tableName, uuid);
+        String ak = settings.getS3AccessKey();
+        String sk = settings.getS3SecretKey();
+        String endpoint = settings.getS3Endpoint();
+
+        loadSegmentData(DB_NAME, label, stageDir, tableName, ak, sk, endpoint);
+        boolean res = waitUtilLoadFinished(DB_NAME, label);
+        assertTrue(res);
+
+        List<Map<String, String>> outputs = getTableRowNum(DB_NAME, tableName);
+        assertEquals(1, outputs.size());
+        assertEquals(400, Integer.valueOf(outputs.get(0).get("num")));
+
+        List<Map<String, String>> outputsNotNull = getTableRowNumNotNUll(DB_NAME, tableName);
+        assertEquals(1, outputsNotNull.size());
+        assertEquals(399, Integer.valueOf(outputsNotNull.get(0).get("num")));
+    }
+
+    @ParameterizedTest
+    @MethodSource("testSwapTable")
+    public void testSwapTable(String tableName) throws Exception {
+        String swapTableName = "tb_all_primitivetype_swap_table" + "1";
+
+        String uuid = RandomStringUtils.randomAlphabetic(8);
+        String stageDir = "s3a://bucket1/.staging_ut/" + uuid + "/";
+        TableSchema tableSchema = restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName);
+        Validator.validateSegmentLoadExport(tableSchema);
+        TabletSchema.TabletSchemaPB tabletSchema = toPbTabletSchema(tableSchema);
+
+        List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
+        long tableId = tableSchema.getId();
+        long indexId = tableSchema.getIndexMetas().get(0).getIndexId();
+
+        assertFalse(partitions.isEmpty());
+        String fastSchemaChange = tableSchema.isFastSchemaChange();
+
+        for (TablePartition partition : partitions) {
+            List<TablePartition.Tablet> tablets = partition.getTablets();
+            assertFalse(tablets.isEmpty());
+
+            for (TablePartition.Tablet tablet : tablets) {
+                Long tabletId = tablet.getId();
+                try {
+                    String storagePath = stageDir + "/" + tableId + "/" + partition.getId() + "/"
+                            + indexId + "/" + tabletId;
+                    Map<String, String> options = settings.toMap();
+                    if (fastSchemaChange.equalsIgnoreCase("false")) {
+                        // http://10.37.55.121:8040/api/meta/header/15143
+                        String metaUrl = tablet.getMetaUrls().get(0);
+                        String metaContext = restClient.getTabletMeta(metaUrl);
+                        options.put("starrocks.format.metaContext", metaContext);
+                        options.put("starrocks.format.fastSchemaChange", fastSchemaChange);
+                    }
+                    StarRocksWriter writer = new StarRocksWriter(tabletId,
+                            tabletSchema,
+                            -1L,
+                            storagePath,
+                            options);
+                    writer.open();
+                    // write use chunk interface
+                    Chunk chunk = writer.newChunk(4096);
+
+                    chunk.reset();
+                    fillSampleData(tabletSchema, chunk, 0, 200);
+                    writer.write(chunk);
+
+                    chunk.reset();
+                    fillSampleData(tabletSchema, chunk, 200, 200);
+                    writer.write(chunk);
+
+                    chunk.release();
+                    writer.flush();
+                    writer.finish();
+                    writer.close();
+                    writer.release();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    fail();
+                }
+            }
+        }
+
+        String renameSql = String.format("alter table `demo`.`%s` swap with %s",tableName, swapTableName);
+        executeSql(renameSql);
+        Thread.sleep(1000);
+
+        String label = String.format("bypass_write_%s_%s_%s", DB_NAME, tableName, uuid);
+        String ak = settings.getS3AccessKey();
+        String sk = settings.getS3SecretKey();
+        String endpoint = settings.getS3Endpoint();
+
+        loadSegmentData(DB_NAME, label, stageDir, tableName, ak, sk, endpoint);
+        boolean res = waitUtilLoadFinished(DB_NAME, label);
+        assertFalse(res);
+    }
+
+    @ParameterizedTest
+    @MethodSource("testCompressTypeTable")
+    public void testCompressTypeTable(String tableName) throws Exception {
+        testTableTypes(tableName);
+    }
+
+    @ParameterizedTest
+    @MethodSource("testSortByTypeTable")
+    public void testSortByTypeTable(String tableName) throws Exception {
+        testTableTypes(tableName);
+    }
+
+    @ParameterizedTest
+    @MethodSource("testStorageTypeTable")
+    public void testStorageTypeTable(String tableName) throws Exception {
+        testTableTypes(tableName);
+    }
+
+    private void testTableTypes(String tableName) throws LoadNonSupportException, RequestException {
+        String uuid = RandomStringUtils.randomAlphabetic(8);
+        String stageDir = "s3a://bucket1/.staging_ut/" + uuid + "/";
+        TableSchema tableSchema = restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName);
+        Validator.validateSegmentLoadExport(tableSchema);
+        TabletSchema.TabletSchemaPB tabletSchema = toPbTabletSchema(tableSchema);
+
+        List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
+        long tableId = tableSchema.getId();
+        long indexId = tableSchema.getIndexMetas().get(0).getIndexId();
+
+        assertFalse(partitions.isEmpty());
+        String fastSchemaChange = tableSchema.isFastSchemaChange();
+
         for (TablePartition partition : partitions) {
             List<TablePartition.Tablet> tablets = partition.getTablets();
             assertFalse(tablets.isEmpty());
@@ -610,6 +846,343 @@ public class SegmentExportTest extends BaseFormatTest {
         }
     }
 
+    @ParameterizedTest
+    @MethodSource("testPartitionTable")
+    public void testPartitionTable(String tableName) throws LoadNonSupportException, RequestException {
+        String uuid = RandomStringUtils.randomAlphabetic(8);
+        String stageDir = "s3a://bucket1/.staging_ut/" + uuid + "/";
+        TableSchema tableSchema = restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName);
+        Validator.validateSegmentLoadExport(tableSchema);
+        TabletSchema.TabletSchemaPB tabletSchema = toPbTabletSchema(tableSchema);
+
+        List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
+        long tableId = tableSchema.getId();
+        long indexId = tableSchema.getIndexMetas().get(0).getIndexId();
+
+        assertFalse(partitions.isEmpty());
+        String fastSchemaChange = tableSchema.isFastSchemaChange();
+
+        int index = 0;
+        for (TablePartition partition : partitions) {
+            List<TablePartition.Tablet> tablets = partition.getTablets();
+            assertFalse(tablets.isEmpty());
+
+            for (TablePartition.Tablet tablet : tablets) {
+                Long tabletId = tablet.getId();
+                int startRow = index * 400;
+                index++;
+                try {
+                    String storagePath = stageDir + "/" + tableId + "/" + partition.getId() + "/"
+                            + indexId + "/" + tabletId;
+                    Map<String, String> options = settings.toMap();
+                    if (fastSchemaChange.equalsIgnoreCase("false")) {
+                        // http://10.37.55.121:8040/api/meta/header/15143
+                        String metaUrl = tablet.getMetaUrls().get(0);
+                        String metaContext = restClient.getTabletMeta(metaUrl);
+                        options.put("starrocks.format.metaContext", metaContext);
+                        options.put("starrocks.format.fastSchemaChange", fastSchemaChange);
+                    }
+                    StarRocksWriter writer = new StarRocksWriter(tabletId,
+                            tabletSchema,
+                            -1L,
+                            storagePath,
+                            options);
+                    writer.open();
+                    // write use chunk interface
+                    Chunk chunk = writer.newChunk(4096);
+
+                    chunk.reset();
+                    fillSampleDataWithinDays(tabletSchema, chunk, startRow, 200);
+                    writer.write(chunk);
+
+                    chunk.reset();
+                    fillSampleDataWithinDays(tabletSchema, chunk, startRow + 200, 200);
+                    writer.write(chunk);
+
+                    chunk.release();
+                    writer.flush();
+                    writer.finish();
+                    writer.close();
+                    writer.release();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    fail();
+                }
+            }
+        }
+
+        String label = String.format("bypass_write_%s_%s_%s", DB_NAME, tableName, uuid);
+        String ak = settings.getS3AccessKey();
+        String sk = settings.getS3SecretKey();
+        String endpoint = settings.getS3Endpoint();
+
+        loadSegmentData(DB_NAME, label, stageDir, tableName, ak, sk, endpoint);
+        boolean res = waitUtilLoadFinished(DB_NAME, label);
+        assertTrue(res);
+
+        List<Map<String, String>> outputs = getTableRowNumGroupByDay(DB_NAME, tableName);
+        assertEquals(2, outputs.size());
+        assertEquals(1000, Integer.valueOf(outputs.get(0).get("num")));
+        assertEquals("2024-08-25", outputs.get(0).get("c_date"));
+
+        assertEquals(1000, Integer.valueOf(outputs.get(1).get("num")));
+        assertEquals("2024-08-26", outputs.get(1).get("c_date"));
+    }
+
+
+    @ParameterizedTest
+    @MethodSource("testListPartitionTable")
+    public void testListPartitionTable(String tableName) throws LoadNonSupportException, RequestException {
+        String uuid = RandomStringUtils.randomAlphabetic(8);
+        String stageDir = "s3a://bucket1/.staging_ut/" + uuid + "/";
+        TableSchema tableSchema = restClient.getTableSchema(DEFAULT_CATALOG, DB_NAME, tableName);
+        Validator.validateSegmentLoadExport(tableSchema);
+        TabletSchema.TabletSchemaPB tabletSchema = toPbTabletSchema(tableSchema);
+
+        List<TablePartition> partitions = restClient.listTablePartitions(DEFAULT_CATALOG, DB_NAME, tableName, false);
+        long tableId = tableSchema.getId();
+        long indexId = tableSchema.getIndexMetas().get(0).getIndexId();
+
+        assertFalse(partitions.isEmpty());
+        String fastSchemaChange = tableSchema.isFastSchemaChange();
+
+        int index = 0;
+        for (TablePartition partition : partitions) {
+            List<TablePartition.Tablet> tablets = partition.getTablets();
+            assertFalse(tablets.isEmpty());
+
+            for (TablePartition.Tablet tablet : tablets) {
+                Long tabletId = tablet.getId();
+                int startRow = index * 400;
+                index++;
+                try {
+                    String storagePath = stageDir + "/" + tableId + "/" + partition.getId() + "/"
+                            + indexId + "/" + tabletId;
+                    Map<String, String> options = settings.toMap();
+                    if (fastSchemaChange.equalsIgnoreCase("false")) {
+                        // http://10.37.55.121:8040/api/meta/header/15143
+                        String metaUrl = tablet.getMetaUrls().get(0);
+                        String metaContext = restClient.getTabletMeta(metaUrl);
+                        options.put("starrocks.format.metaContext", metaContext);
+                        options.put("starrocks.format.fastSchemaChange", fastSchemaChange);
+                    }
+                    StarRocksWriter writer = new StarRocksWriter(tabletId,
+                            tabletSchema,
+                            -1L,
+                            storagePath,
+                            options);
+                    writer.open();
+                    // write use chunk interface
+                    Chunk chunk = writer.newChunk(4096);
+
+                    chunk.reset();
+                    fillSampleDataWithinDays(tabletSchema, chunk, startRow, 200);
+                    writer.write(chunk);
+
+                    chunk.reset();
+                    fillSampleDataWithinDays(tabletSchema, chunk, startRow + 200, 200);
+                    writer.write(chunk);
+
+                    chunk.release();
+                    writer.flush();
+                    writer.finish();
+                    writer.close();
+                    writer.release();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    fail();
+                }
+            }
+        }
+
+        String label = String.format("bypass_write_%s_%s_%s", DB_NAME, tableName, uuid);
+        String ak = settings.getS3AccessKey();
+        String sk = settings.getS3SecretKey();
+        String endpoint = settings.getS3Endpoint();
+
+        loadSegmentData(DB_NAME, label, stageDir, tableName, ak, sk, endpoint);
+        boolean res = waitUtilLoadFinished(DB_NAME, label);
+        assertTrue(res);
+
+        List<Map<String, String>> outputs = getTableRowNumGroupByCity(DB_NAME, tableName);
+        assertEquals(4, outputs.size());
+        assertEquals(200, Integer.valueOf(outputs.get(0).get("num")));
+        assertEquals("Beijing", outputs.get(0).get("c_string"));
+
+        assertEquals(200, Integer.valueOf(outputs.get(1).get("num")));
+        assertEquals("Hangzhou", outputs.get(1).get("c_string"));
+
+        assertEquals(200, Integer.valueOf(outputs.get(2).get("num")));
+        assertEquals("Los Angeles", outputs.get(2).get("c_string"));
+
+        assertEquals(200, Integer.valueOf(outputs.get(3).get("num")));
+        assertEquals("San Francisco", outputs.get(3).get("c_string"));
+    }
+
+    // when rowId is 0, fill the max value,
+    // 1 fill the min value,
+    // 2 fill null,
+    // >=4 fill the base value * rowId * sign.
+    private static void fillSampleDataWithinDays(TabletSchema.TabletSchemaPB pbSchema, Chunk chunk, int startRowId, int numRows) {
+
+        for (int colIdx = 0; colIdx < pbSchema.getColumnCount(); colIdx++) {
+            TabletSchema.ColumnPB pbColumn = pbSchema.getColumn(colIdx);
+            Column column = chunk.getColumn(colIdx);
+            for (int rowIdx = 0; rowIdx < numRows; rowIdx++) {
+                int rowId = startRowId + rowIdx;
+                if ("rowid".equalsIgnoreCase(pbColumn.getName())) {
+                    column.appendInt(rowId);
+                    continue;
+                }
+                DataType dataType = DataType.fromLiteral(pbColumn.getType()).get();
+
+                if (rowId == 2 && (dataType != DataType.DATE && !"c_string".equalsIgnoreCase(pbColumn.getName()))) {
+                    column.appendNull();
+                    continue;
+                }
+                int sign = (rowId % 2 == 0) ? -1 : 1;
+
+                switch (dataType) {
+                    case BOOLEAN:
+                        column.appendBool(rowId % 2 == 0);
+                        break;
+                    case TINYINT:
+                        if (rowId == 0) {
+                            column.appendByte(Byte.MAX_VALUE);
+                        } else if (rowId == 1) {
+                            column.appendByte(Byte.MIN_VALUE);
+                        } else {
+                            column.appendByte((byte) (rowId * sign));
+                        }
+                        break;
+                    case SMALLINT:
+                        if (rowId == 0) {
+                            column.appendShort(Short.MAX_VALUE);
+                        } else if (rowId == 1) {
+                            column.appendShort(Short.MIN_VALUE);
+                        } else {
+                            column.appendShort((short) (rowId * 10 * sign));
+                        }
+                        break;
+                    case INT:
+                        if (rowId == 0) {
+                            column.appendInt(Integer.MAX_VALUE);
+                        } else if (rowId == 1) {
+                            column.appendInt(Integer.MIN_VALUE);
+                        } else {
+                            column.appendInt(rowId * 100 * sign);
+                        }
+                        break;
+                    case BIGINT:
+                        if (rowId == 0) {
+                            column.appendLong(Long.MAX_VALUE);
+                        } else if (rowId == 1) {
+                            column.appendLong(Long.MIN_VALUE);
+                        } else {
+                            column.appendLong(rowId * 1000L * sign);
+                        }
+                        break;
+                    case LARGEINT:
+                        if (rowId == 0) {
+                            column.appendLargeInt(new BigInteger("6693349846790746512344567890123456789"));
+                        } else if (rowId == 1) {
+                            column.appendLargeInt(new BigInteger("-6693349846790746512344567890123456789"));
+                        } else {
+                            column.appendLargeInt(BigInteger.valueOf(rowId * 10000L * sign));
+                        }
+                        break;
+                    case FLOAT:
+                        column.appendFloat(123.45678901234f * rowId * sign);
+                        break;
+                    case DOUBLE:
+                        column.appendDouble(23456.78901234 * rowId * sign);
+                        break;
+                    case DECIMAL:
+                        // decimal v2 type
+                        BigDecimal bdv2;
+                        if (rowId == 0) {
+                            bdv2 = new BigDecimal("-12345678901234567890123.4567");
+                        } else if (rowId == 1) {
+                            bdv2 = new BigDecimal("999999999999999999999999.9999");
+                        } else {
+                            bdv2 = new BigDecimal("1234.56789");
+                            bdv2 = bdv2.multiply(BigDecimal.valueOf(sign));
+                        }
+                        column.appendDecimal(bdv2);
+                        break;
+                    case DECIMAL32:
+                    case DECIMAL64:
+                    case DECIMAL128:
+                        BigDecimal bd;
+                        if (rowId == 0) {
+                            if (pbColumn.getPrecision() <= 9) {
+                                bd = new BigDecimal("9999.5678");
+                            } else if (pbColumn.getPrecision() <= 18) {
+                                bd = new BigDecimal("99999999999.56789");
+                            } else {
+                                bd = new BigDecimal("9999999999999999999999999999.56789");
+                            }
+                        } else if (rowId == 1) {
+                            if (pbColumn.getPrecision() <= 9) {
+                                bd = new BigDecimal("-9999.5678");
+                            } else if (pbColumn.getPrecision() <= 18) {
+                                bd = new BigDecimal("-99999999999.56789");
+                            } else {
+                                bd = new BigDecimal("-9999999999999999999999999999.56789");
+                            }
+                        } else {
+                            if (pbColumn.getPrecision() <= 9) {
+                                bd = new BigDecimal("125.5678");
+                            } else if (pbColumn.getPrecision() <= 18) {
+                                bd = new BigDecimal("12348902.56789");
+                            } else {
+                                bd = new BigDecimal("1234564567890123.56789");
+                            }
+                            bd = bd.multiply(BigDecimal.valueOf((long) rowId * sign))
+                                    .setScale(pbColumn.getFrac(), RoundingMode.HALF_UP);
+                        }
+                        column.appendDecimal(bd);
+                        break;
+                    case CHAR:
+                    case VARCHAR:
+                        if (rowId % 4 == 0) {
+                            column.appendString("Beijing");
+                        } else if (rowId % 4 == 1) {
+                            column.appendString("Hangzhou");
+                        } else if (rowId % 4 == 2) {
+                            column.appendString("Los Angeles");
+                        } else if (rowId % 4 == 3) {
+                            column.appendString("San Francisco");
+                        }
+                        break;
+                    case DATE:
+                        Date dt;
+                        if (sign == 1) {
+                            dt = Date.valueOf("2024-08-25");
+                        } else {
+                            dt = Date.valueOf("2024-08-26");
+                        }
+                        column.appendDate(dt);
+                        break;
+                    case DATETIME:
+                        Timestamp ts;
+                        if (rowId == 0) {
+                            ts = Timestamp.valueOf("1800-11-20 12:34:56");
+                        } else if (rowId == 1) {
+                            ts = Timestamp.valueOf("4096-11-30 11:22:33");
+                        } else {
+                            ts = Timestamp.valueOf("2023-12-30 22:33:44");
+                            ts.setYear(123 + rowId * sign);
+                        }
+                        column.appendTimestamp(ts);
+                        break;
+                    default:
+                        throw new IllegalStateException("unsupported column type: " + pbColumn.getType());
+                }
+            }
+        }
+    }
+
     public List<Map<String, String>> getTableRowNum(String db, String table) {
         String queryStmt = String.format("select count(*) as num from `%s`.`%s`;", db, table);
         return executeSqlWithReturn(queryStmt, new ArrayList<>());
@@ -617,6 +1190,18 @@ public class SegmentExportTest extends BaseFormatTest {
 
     public List<Map<String, String>> getTableRowNumNotNUll(String db, String table) {
         String queryStmt = String.format("select count(*) as num from `%s`.`%s` where c_int is not null;", db, table);
+        return executeSqlWithReturn(queryStmt, new ArrayList<>());
+    }
+
+
+    public List<Map<String, String>> getTableRowNumGroupByDay(String db, String table) {
+        String queryStmt = String.format(" select c_date,count(*) AS num from  `%s`.`%s` " +
+                "group by c_date order by c_date;", db, table);
+        return executeSqlWithReturn(queryStmt, new ArrayList<>());
+    }
+    public List<Map<String, String>> getTableRowNumGroupByCity(String db, String table) {
+        String queryStmt = String.format(" select c_string,count(*) AS num from  `%s`.`%s` " +
+                "group by c_string order by c_string;", db, table);
         return executeSqlWithReturn(queryStmt, new ArrayList<>());
     }
 
