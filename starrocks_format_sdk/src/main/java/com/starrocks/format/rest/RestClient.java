@@ -122,6 +122,8 @@ public class RestClient implements AutoCloseable {
 
     private int retries = 3;
 
+    private boolean skipFeConnectCheck = false;
+
     private RestClient() {
     }
 
@@ -500,7 +502,9 @@ public class RestClient implements AutoCloseable {
                     .addInterceptorFirst((HttpRequestInterceptor) (req, ctx) -> req.removeHeaders(HTTP.CONTENT_LEN))
                     .build()) {
                 HttpClientContext context = HttpClientContext.create();
-                request.addHeader(new BasicScheme().authenticate(credentials, request, context));
+                if (!skipFeConnectCheck) {
+                    request.addHeader(new BasicScheme().authenticate(credentials, request, context));
+                }
                 LOG.debug("Send request: {}", request);
                 try (CloseableHttpResponse response = httpClient.execute(request, context)) {
                     StatusLine respStatus = response.getStatusLine();
@@ -544,6 +548,8 @@ public class RestClient implements AutoCloseable {
         private String password;
 
         private Integer retries;
+
+        private boolean skipFeConnectCheck = false;
 
         public Builder() {
         }
@@ -616,13 +622,13 @@ public class RestClient implements AutoCloseable {
             return this;
         }
 
+        public Builder setSkipFeConnectCheck(boolean skip) {
+            this.skipFeConnectCheck = skip;
+            return this;
+        }
+
         public RestClient build() {
             RestClient restClient = new RestClient();
-
-            if (CollectionUtils.isEmpty(this.feEndpoints)) {
-                throw new IllegalArgumentException("missing fe endpoints");
-            }
-            restClient.setFeEndpoints(this.feEndpoints);
 
             Optional.ofNullable(this.connectTimeoutMillis)
                     .ifPresent(restClient::setConnectTimeoutMillis);
@@ -630,11 +636,20 @@ public class RestClient implements AutoCloseable {
             Optional.ofNullable(this.socketTimeoutMillis)
                     .ifPresent(restClient::setSocketTimeoutMillis);
 
-            if (StringUtils.isBlank(username)) {
-                throw new IllegalArgumentException("missing username");
-            }
+            restClient.setSkipFeConnectCheck(skipFeConnectCheck);
 
-            restClient.setCredentials(new UsernamePasswordCredentials(this.username, this.password));
+            if (!skipFeConnectCheck) {
+                if (CollectionUtils.isEmpty(this.feEndpoints)) {
+                    throw new IllegalArgumentException("missing fe endpoints");
+                }
+                restClient.setFeEndpoints(this.feEndpoints);
+
+                if (StringUtils.isBlank(username)) {
+                    throw new IllegalArgumentException("missing username");
+                }
+
+                restClient.setCredentials(new UsernamePasswordCredentials(this.username, this.password));
+            }
 
             Optional.ofNullable(this.retries).ifPresent(restClient::setRetries);
 
@@ -668,5 +683,9 @@ public class RestClient implements AutoCloseable {
 
     private void setRetries(int retries) {
         this.retries = retries;
+    }
+
+    private void setSkipFeConnectCheck(boolean skip) {
+        this.skipFeConnectCheck = skip;
     }
 }
