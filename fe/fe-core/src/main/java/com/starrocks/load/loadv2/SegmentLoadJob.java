@@ -125,6 +125,7 @@ public class SegmentLoadJob extends BulkLoadJob {
     @Override
     protected void unprotectedExecuteJob() throws LoadException {
         LoadTask task = new SegmentLoadPendingTask(this, fileGroupAggInfo.getAggKeyToFileGroups(), brokerDesc);
+        idToTasks.put(task.getSignature(), task);
         submitTask(GlobalStateMgr.getCurrentState().getPendingLoadTaskScheduler(), task);
     }
 
@@ -414,6 +415,7 @@ public class SegmentLoadJob extends BulkLoadJob {
                                         long backendId = replica.getBackendId();
                                         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
 
+                                        checkPushTaskState(tabletId, replicaId);
                                         pushTask(backendId, tableId, partitionId, indexId, tabletId, replicaId, params,
                                                 batchTask, tabletMetaStr, backend, replica, tabletFinishedReplicas);
                                     }
@@ -461,6 +463,24 @@ public class SegmentLoadJob extends BulkLoadJob {
             }
         } finally {
             db.readUnlock();
+        }
+    }
+
+    private void checkPushTaskState(long tabletId, long replicaId) throws LoadException {
+        if (tabletToSentReplicaPushTask.containsKey(tabletId)
+                && tabletToSentReplicaPushTask.get(tabletId).containsKey(replicaId)) {
+            PushTask pushTask = tabletToSentReplicaPushTask.get(tabletId).get(replicaId);
+            if (pushTask != null) {
+                int failedTimes = pushTask.getFailedTimes();
+                if (failedTimes > 0) {
+                    String errMsg = new LogBuilder(LogKey.LOAD_JOB, id)
+                            .add("database_id", dbId)
+                            .add("label", label)
+                            .add("error_msg", pushTask.getErrorMsg())
+                            .build();
+                    throw new LoadException(errMsg);
+                }
+            }
         }
     }
 

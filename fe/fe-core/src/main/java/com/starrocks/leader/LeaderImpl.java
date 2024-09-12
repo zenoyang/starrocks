@@ -250,7 +250,8 @@ public class LeaderImpl {
                         && taskType != TTaskType.UPDATE_SCHEMA) {
                     if (taskType == TTaskType.REALTIME_PUSH) {
                         PushTask pushTask = (PushTask) task;
-                        if (pushTask.getPushType() == TPushType.DELETE) {
+                        if (pushTask.getPushType() == TPushType.DELETE
+                                || pushTask.getPushType() == TPushType.LOAD_SEGMENT) {
                             LOG.info("remove push replica. tabletId: {}, backendId: {}", task.getSignature(),
                                      pushTask.getBackendId());
 

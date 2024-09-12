@@ -104,7 +104,7 @@ public class SegmentLoadPendingTask extends LoadTask {
             // tableId/partitionId/indexId/tabletId/data/uuid_0.dat
             // tableId/partitionId/indexId/tabletId/data/uuid_1.dat
             // tableId/partitionId/indexId/tabletId/tablet.schema
-            if (!filePath.contains(String.valueOf(tableId))) {
+            if (!filePath.startsWith(path + tableId) && !filePath.startsWith(path + "/" + tableId)) {
                 continue;
             }
             String relativePath = filePath.substring(filePath.indexOf(String.valueOf(tableId)));
@@ -122,6 +122,11 @@ public class SegmentLoadPendingTask extends LoadTask {
                 String tabletMeta = relativePath.substring(0, relativePath.lastIndexOf("/"));
                 segmentAttachment.addSchemaFilePath(tabletMeta, filePath);
             }
+        }
+
+        if (segmentAttachment.getTabletMetaToDataFileInfo().isEmpty()) {
+            throw new UserException("Segment load file path is invalid or empty. job: "
+                    + callback.getCallbackId());
         }
 
         if (!segmentAttachment.getTabletMetaToSchemaFilePath().keySet().containsAll(
